@@ -11,6 +11,7 @@
   --series-glucose: #2a78d6;
   --series-manual: #eb6834;
   --series-auto: #1baf7a;
+  --series-basal: #eda100;
   --band: rgba(42, 120, 214, 0.08);
   --grid: #e8e7e2;
   --danger: #c0362c;
@@ -44,6 +45,7 @@
     --series-glucose: #3987e5;
     --series-manual: #d95926;
     --series-auto: #199e70;
+    --series-basal: #c98500;
     --band: rgba(57, 135, 229, 0.12);
     --grid: #2a2a28;
     --danger: #ef6b61;
@@ -63,6 +65,7 @@
   --series-glucose: #3987e5;
   --series-manual: #d95926;
   --series-auto: #199e70;
+  --series-basal: #c98500;
   --band: rgba(57, 135, 229, 0.12);
   --grid: #2a2a28;
   --danger: #ef6b61;
@@ -213,6 +216,9 @@ input {
 .glucose-last { fill: var(--series-glucose); stroke: var(--surface-1); stroke-width: 2; }
 .bolus-manual { fill: var(--series-manual); stroke: var(--surface-1); stroke-width: 2; }
 .bolus-auto { fill: var(--series-auto); stroke: var(--surface-1); stroke-width: 2; }
+.basal-area { fill: var(--series-basal); opacity: 0.35; }
+.basal-edge { fill: none; stroke: var(--series-basal); stroke-width: 1.5; }
+.basal-profile { fill: none; stroke: var(--text-secondary); stroke-width: 1.5; stroke-dasharray: 4 3; }
 .tandem-upload { fill: var(--text-secondary); stroke: var(--surface-1); stroke-width: 2; }
 .ns-sync { fill: var(--surface-1); stroke: var(--text-secondary); stroke-width: 2; }
 .pending-hatch-line { stroke: var(--text-muted); stroke-width: 1.5; opacity: 0.35; }
@@ -242,6 +248,8 @@ input {
 .key-line::before { width: 14px; height: 2px; background: var(--series-glucose); }
 .key-manual::before { width: 10px; height: 10px; background: var(--series-manual); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .key-auto::before { width: 9px; height: 9px; background: var(--series-auto); border-radius: 50%; }
+.key-basal::before { width: 14px; height: 10px; background: color-mix(in srgb, var(--series-basal) 35%, transparent); border-top: 2px solid var(--series-basal); }
+.key-profile::before { width: 14px; height: 0; border-top: 2px dashed var(--text-secondary); }
 .key-upload::before { width: 8px; height: 8px; background: var(--text-secondary); transform: rotate(45deg); margin-left: 1px; }
 .key-sync::before { width: 7px; height: 7px; border: 2px solid var(--text-secondary); border-radius: 50%; }
 .key-pending::before {

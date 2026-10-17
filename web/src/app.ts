@@ -6,7 +6,7 @@ import {
   formatIob, formatRate, formatSyncStatus, isStale,
 } from './format';
 import { renderGraph, TARGET_HIGH, TARGET_LOW } from './graph';
-import { BOLUS_WINDOW_MINUTES, type Bolus } from './model';
+import { BOLUS_WINDOW_MINUTES, parseBasalSpans, profileSpans, type Bolus } from './model';
 import { bolusesIn, fetchData, NightscoutError, pumpStateIn, type Data } from './nightscout';
 import {
   forgetSettings, loadPref, loadSettings, normalizeUrl, savePref, saveSettings, type Settings,
@@ -247,6 +247,8 @@ export class App {
         h('span', { class: 'key key-manual' }, 'Manual bolus'),
         h('span', { class: 'key key-auto' }, 'Auto bolus'),
         h('span', { class: 'key key-band' }, `Target ${TARGET_LOW}–${TARGET_HIGH}`),
+        h('span', { class: 'key key-basal' }, 'Basal (U/hr)'),
+        h('span', { class: 'key key-profile' }, 'Profile basal'),
         h('span', { class: 'key key-upload' }, 'Pump → Tandem upload'),
         h('span', { class: 'key key-sync' }, 'Nightscout sync'),
         h('span', { class: 'key key-pending' }, 'Not uploaded yet')));
@@ -256,10 +258,15 @@ export class App {
     const host = document.getElementById('graph');
     if (!host || !this.data) return;
     const sync = this.data.sync;
+    const { fetchedMs } = this.data;
     renderGraph(host, this.data.readings, bolusesIn(this.data, this.graphHours), this.graphHours,
-      this.data.fetchedMs, sync || this.data.uploads.length
+      fetchedMs, sync || this.data.uploads.length
         ? { uploads: this.data.uploads, newestEventMs: sync?.newestEventMs ?? null, syncedMs: sync?.syncedMs ?? null }
-        : null);
+        : null,
+      {
+        delivered: parseBasalSpans(this.data.treatments),
+        profile: profileSpans(this.data.profile, fetchedMs - this.graphHours * 3_600_000, fetchedMs),
+      });
   }
 
   private bolusSection(data: Data): HTMLElement {

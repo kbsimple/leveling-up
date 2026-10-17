@@ -1,9 +1,10 @@
-// Glucose line chart with bolus and Tandem lanes, drawn as inline SVG.
+// Glucose line chart with bolus, basal and Tandem lanes, drawn as inline SVG.
+// Basal has its own panel and scale rather than a second axis on the glucose plot.
 // Colors come from CSS custom properties (see style.css); tooltip text is set
 // with textContent only.
 
-import { ago, formatBolus, formatBolusDetail, formatClock } from './format';
-import type { Bolus, PumpUpload, Reading } from './model';
+import { ago, formatBolus, formatBolusDetail, formatClock, formatRate } from './format';
+import { spanAt, type BasalSpan, type Bolus, type PumpUpload, type Reading } from './model';
 
 export const TARGET_LOW = 70;
 export const TARGET_HIGH = 180;
@@ -17,13 +18,23 @@ export interface TandemTimeline {
   syncedMs: number | null;
 }
 
+/** Delivered basal and the profile schedule, for the basal panel. */
+export interface BasalTimeline {
+  delivered: BasalSpan[];
+  profile: BasalSpan[];
+}
+
 const SVG = 'http://www.w3.org/2000/svg';
-const HEIGHT = 262;
-const PAD = { top: 12, right: 12, bottom: 76, left: 34 };
-const PLOT_BOTTOM = HEIGHT - PAD.bottom;
+const PAD = { top: 12, right: 12, left: 34 };
+const PLOT_BOTTOM = 186; // glucose plot
 const BOLUS_Y = PLOT_BOTTOM + 16; // bolus marker lane
-const TANDEM_Y = PLOT_BOTTOM + 36; // pump upload / Nightscout sync lane
-const LABEL_Y = HEIGHT - 8; // x axis labels
+const BASAL_TOP = PLOT_BOTTOM + 30; // basal panel
+const BASAL_BOTTOM = BASAL_TOP + 44;
+const TANDEM_Y = BASAL_BOTTOM + 16; // pump upload / Nightscout sync lane
+const LABEL_Y = TANDEM_Y + 26; // x axis labels
+const HEIGHT = LABEL_Y + 8;
+/** Smallest top of the basal scale, in U/hr. */
+const MIN_BASAL_MAX = 1;
 /** Readings further apart than this are drawn as a gap. */
 const GAP_MS = 15 * 60_000;
 /** How close (in chart px) a tap must be to a lane marker. */
@@ -31,6 +42,16 @@ const HIT_PX = 14;
 
 /** Document-level listeners per chart host, so re-renders don't pile them up. */
 const listeners = new WeakMap<HTMLElement, AbortController>();
+
+type Lane = 'plot' | 'bolus' | 'basal' | 'tandem';
+
+/** Which horizontal band a chart y coordinate falls in. */
+function laneAt(py: number): Lane {
+  if (py <= PLOT_BOTTOM + 4) return 'plot';
+  if (py < BASAL_TOP - 3) return 'bolus';
+  if (py <= BASAL_BOTTOM + 5) return 'basal';
+  return 'tandem';
+}
 
 type Marker =
   | { lane: 'bolus'; cx: number; ms: number; bolus: Bolus }
@@ -59,7 +80,7 @@ function diamond(cx: number, cy: number, r: number): string {
 /** Renders the chart into `host`, replacing its contents. */
 export function renderGraph(
   host: HTMLElement, readings: Reading[], boluses: Bolus[], hours: number, nowMs: number,
-  tandem: TandemTimeline | null,
+  tandem: TandemTimeline | null, basal: BasalTimeline,
 ): void {
   host.replaceChildren();
   const width = Math.max(280, Math.round(host.clientWidth || 360));
@@ -73,7 +94,7 @@ export function renderGraph(
 
   const svg = el('svg', {
     viewBox: `0 0 ${width} ${HEIGHT}`, width: '100%', height: HEIGHT, class: 'graph',
-    role: 'img', 'aria-label': `Glucose over the last ${hours} hours, with boluses and Tandem uploads`,
+    role: 'img', 'aria-label': `Glucose over the last ${hours} hours, with boluses, basal and Tandem uploads`,
   }, host);
 
   // Target range band and recessive grid.
@@ -139,6 +160,36 @@ export function renderGraph(
     }
   }
 
+  // Basal panel: delivered rate as a stepped area, profile schedule as a dashed step line.
+  const inWindow = (sp: BasalSpan) => sp.endMs > startMs && sp.startMs < nowMs;
+  const delivered = basal.delivered.filter(inWindow);
+  const profile = basal.profile.filter(inWindow);
+  const basalMax = Math.max(MIN_BASAL_MAX, ...[...delivered, ...profile].map((sp) => Math.ceil(sp.rate * 2) / 2));
+  const by = (rate: number) => BASAL_BOTTOM - (rate / basalMax) * (BASAL_BOTTOM - BASAL_TOP);
+  const clampX = (ms: number) => x(Math.min(Math.max(ms, startMs), nowMs));
+  el('line', { x1: PAD.left, x2: right, y1: BASAL_BOTTOM, y2: BASAL_BOTTOM, class: 'axis' }, svg);
+  el('line', { x1: PAD.left, x2: right, y1: BASAL_TOP, y2: BASAL_TOP, class: 'grid' }, svg);
+  el('text', { x: PAD.left - 6, y: BASAL_TOP + 4, class: 'axis-label', 'text-anchor': 'end' }, svg)
+    .textContent = String(basalMax);
+  el('text', { x: PAD.left - 6, y: BASAL_BOTTOM, class: 'axis-label', 'text-anchor': 'end' }, svg)
+    .textContent = '0';
+  const area = delivered
+    .map((sp) => `M${clampX(sp.startMs).toFixed(1)},${BASAL_BOTTOM}V${by(sp.rate).toFixed(1)}H${clampX(sp.endMs).toFixed(1)}V${BASAL_BOTTOM}Z`)
+    .join('');
+  if (area) el('path', { d: area, class: 'basal-area' }, svg);
+  let edge = '';
+  let profileLine = '';
+  for (const [i, sp] of delivered.entries()) {
+    const join = i > 0 && delivered[i - 1].endMs === sp.startMs ? 'V' : `M${clampX(sp.startMs).toFixed(1)},`;
+    edge += `${join}${by(sp.rate).toFixed(1)}H${clampX(sp.endMs).toFixed(1)}`;
+  }
+  for (const [i, sp] of profile.entries()) {
+    const join = i > 0 && profile[i - 1].endMs === sp.startMs ? 'V' : `M${clampX(sp.startMs).toFixed(1)},`;
+    profileLine += `${join}${by(sp.rate).toFixed(1)}H${clampX(sp.endMs).toFixed(1)}`;
+  }
+  if (edge) el('path', { d: edge, class: 'basal-edge' }, svg);
+  if (profileLine) el('path', { d: profileLine, class: 'basal-profile' }, svg);
+
   // Tandem lane: pump -> Tandem uploads (diamonds) and the last Nightscout sync (ring).
   for (const u of tandem?.uploads ?? []) {
     if (u.uploadedMs < startMs || u.uploadedMs > nowMs) continue;
@@ -161,6 +212,15 @@ export function renderGraph(
   host.appendChild(tooltip);
 
   const hit = el('rect', { x: PAD.left, y: 0, width: right - PAD.left, height: HEIGHT, class: 'hit' }, svg);
+
+  /** "Profile 0.65 U/hr · 37% below" for a delivered rate at `atMs`. */
+  const profileNote = (atMs: number, rate: number): string => {
+    const p = spanAt(profile, atMs);
+    if (!p) return 'No profile rate';
+    if (p.rate === 0 || Math.abs(rate - p.rate) < 0.001) return `Profile ${formatRate(p.rate)}`;
+    const pct = Math.round(((rate - p.rate) / p.rate) * 100);
+    return `Profile ${formatRate(p.rate)} · ${Math.abs(pct)}% ${pct > 0 ? 'above' : 'below'}`;
+  };
 
   const lines = (strong: string, ...rest: string[]) => {
     tooltip.replaceChildren();
@@ -186,19 +246,22 @@ export function renderGraph(
     const py = ((clientY - box.top) / box.height) * HEIGHT;
     const ms = startMs + ((px - PAD.left) / (right - PAD.left)) * (nowMs - startMs);
 
-    // Below the plot, taps pick the nearest marker in the lane under the pointer.
+    // Below the plot, taps pick the nearest marker in the lane under the pointer;
+    // in the basal panel they read the rate at that time.
+    const lane = laneAt(py);
     let marker: Marker | null = null;
-    if (py > PLOT_BOTTOM + 4) {
-      const lane = py < (BOLUS_Y + TANDEM_Y) / 2 ? 'bolus' : 'tandem';
+    if (lane === 'bolus' || lane === 'tandem') {
       marker = markers
         .filter((m) => m.lane === lane && Math.abs(m.cx - px) <= HIT_PX)
         .sort((a, b) => Math.abs(a.cx - px) - Math.abs(b.cx - px))[0] ?? null;
     }
-    const nearest = marker ? null : visible.reduce<Reading | null>(
+    const basalSpan = lane === 'basal' ? spanAt(delivered, Math.min(ms, nowMs - 1)) : null;
+    const nearest = marker || basalSpan ? null : visible.reduce<Reading | null>(
       (best, r) => (!best || Math.abs(r.timeMs - ms) < Math.abs(best.timeMs - ms) ? r : best), null);
-    if (!marker && !nearest) return hide();
+    if (!marker && !basalSpan && !nearest) return hide();
 
-    const key = marker ? `${marker.lane}:${marker.ms}` : `glucose:${nearest!.timeMs}`;
+    const key = marker ? `${marker.lane}:${marker.ms}`
+      : basalSpan ? `basal:${basalSpan.startMs}` : `glucose:${nearest!.timeMs}`;
     if (toggle && !tooltip.hidden && key === shownKey) {
       hide();
       dismissedKey = key;
@@ -208,7 +271,7 @@ export function renderGraph(
     dismissedKey = null;
     shownKey = key;
 
-    const atMs = marker ? marker.ms : nearest!.timeMs;
+    const atMs = marker ? marker.ms : basalSpan ? Math.min(Math.max(ms, startMs), nowMs) : nearest!.timeMs;
     crosshair.setAttribute('x1', String(x(Math.min(atMs, nowMs))));
     crosshair.setAttribute('x2', String(x(Math.min(atMs, nowMs))));
     crosshair.setAttribute('visibility', 'visible');
@@ -230,9 +293,14 @@ export function renderGraph(
         ...(u.newestEventMs !== null ? [`Pump data through ${formatClock(u.newestEventMs)}`] : []));
     } else if (marker) {
       lines('Synced to Nightscout', `${formatClock(marker.ms)} (${ago(marker.ms, nowMs)})`);
+    } else if (basalSpan) {
+      lines(`Basal ${formatRate(basalSpan.rate)}`,
+        `${formatClock(basalSpan.startMs)}–${formatClock(basalSpan.endMs)}`, profileNote(basalSpan.startMs, basalSpan.rate));
     } else {
       const pending = pendingFromMs !== null && nearest!.timeMs > pendingFromMs;
+      const at = spanAt(delivered, nearest!.timeMs);
       lines(`${nearest!.mgdl} mg/dL`, formatClock(nearest!.timeMs),
+        ...(at ? [`Basal ${formatRate(at.rate)}`] : []),
         ...(pending ? ['Pump data not uploaded yet'] : []));
     }
     tooltip.hidden = false;

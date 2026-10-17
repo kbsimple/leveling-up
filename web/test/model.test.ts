@@ -4,7 +4,8 @@ import {
   formatAge, formatDelta, formatDuration, formatIob, formatRate, isStale, u,
 } from '../src/format';
 import {
-  latestTreatmentMs, parseEntries, parsePebble, parsePumpState, parseUploadHistory, scheduledBasal,
+  latestTreatmentMs, parseBasalSpans, parseEntries, parsePebble, parsePumpState, parseUploadHistory,
+  profileSpans, scheduledBasal, spanAt,
   treatmentTimeMs,
   type ProfileDoc,
 } from '../src/model';
@@ -162,5 +163,32 @@ describe('parseUploadHistory', () => {
       { uploadedMs: ms('2026-10-17T19:06:48Z'), newestEventMs: ms('2026-10-17T19:06:31Z') },
     ]);
     expect(parseUploadHistory(null)).toEqual([]);
+  });
+});
+
+describe('basal spans', () => {
+  it('ends each span at its duration or the next start', () => {
+    const spans = parseBasalSpans([
+      { eventType: 'Temp Basal', created_at: '2026-10-17T18:05:00Z', absolute: 0.41, duration: 10 },
+      { eventType: 'Temp Basal', created_at: '2026-10-17T18:00:00Z', absolute: 0.52, duration: 5 },
+      { eventType: 'Temp Basal', created_at: '2026-10-17T17:50:00Z', absolute: 0, duration: 30 },
+      { eventType: 'Combo Bolus', created_at: '2026-10-17T17:55:00Z', insulin: 1 },
+    ]);
+    expect(spans).toEqual([
+      { startMs: ms('2026-10-17T17:50:00Z'), endMs: ms('2026-10-17T18:00:00Z'), rate: 0 },
+      { startMs: ms('2026-10-17T18:00:00Z'), endMs: ms('2026-10-17T18:05:00Z'), rate: 0.52 },
+      { startMs: ms('2026-10-17T18:05:00Z'), endMs: ms('2026-10-17T18:15:00Z'), rate: 0.41 },
+    ]);
+    expect(spanAt(spans, ms('2026-10-17T18:07:00Z'))?.rate).toBe(0.41);
+    expect(spanAt(spans, ms('2026-10-17T18:20:00Z'))).toBeNull();
+  });
+
+  it('turns the profile schedule into merged spans in its timezone', () => {
+    // 01:30–03:00 Los Angeles: 0.4 until 02:00, then 0.35.
+    expect(profileSpans(PROFILE, ms('2026-10-17T08:30:00Z'), ms('2026-10-17T10:00:00Z'))).toEqual([
+      { startMs: ms('2026-10-17T08:30:00Z'), endMs: ms('2026-10-17T09:00:00Z'), rate: 0.4 },
+      { startMs: ms('2026-10-17T09:00:00Z'), endMs: ms('2026-10-17T10:00:00Z'), rate: 0.35 },
+    ]);
+    expect(profileSpans(null, 0, 3_600_000)).toEqual([]);
   });
 });

@@ -33,7 +33,8 @@ GitHub Actions, then builds a signed APK and publishes it as release
 ## Web companion
 
 https://kbsimple.github.io/leveling-up/ is a mobile-friendly page with the
-same view as the widget, plus a glucose graph with bolus markers and a Tandem
+same view as the widget, plus a glucose graph with bolus markers, a basal panel
+(delivered vs. profile rate), and a Tandem
 lane (pump uploads, Nightscout syncs, and a hatched "not uploaded yet" span), a 2/6/24h
 bolus history, and basal/Control-IQ status. It works on any phone, including
 iPhone (Share → Add to Home Screen).

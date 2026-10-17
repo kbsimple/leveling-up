@@ -164,6 +164,12 @@ hatched band from the newest pump event to now ("not uploaded yet"), so
 missing boluses/basal at the right edge are explained on the chart. Records
 are kept for 26 hours (pruned by age) so the 24h view has upload history.
 
+A basal panel sits between the bolus and Tandem lanes with its own U/hr scale
+(never a second axis on the glucose plot): delivered rate from Temp Basal
+treatments as a stepped area, the profile schedule as a dashed step line.
+Tapping it shows the rate, its time span, and the difference from profile;
+the glucose readout also lists the basal rate at that time.
+
 ## Open questions
 
 - **Widget app:** reuse an existing Nightscout client (leading candidate:

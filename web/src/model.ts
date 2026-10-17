@@ -186,11 +186,18 @@ export interface ProfileDoc {
   }>;
 }
 
+const dayFormatters = new Map<string, Intl.DateTimeFormat>();
+
 /** Seconds since local midnight of `timeMs` in `timeZone`. */
 function secondsIntoDay(timeMs: number, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit',
-  }).formatToParts(new Date(timeMs));
+  let fmt = dayFormatters.get(timeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    dayFormatters.set(timeZone, fmt);
+  }
+  const parts = fmt.formatToParts(new Date(timeMs));
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
   return get('hour') * 3600 + get('minute') * 60 + get('second');
 }
@@ -324,4 +331,54 @@ export function parseUploadHistory(records: unknown): PumpUpload[] {
   return [...byUpload.entries()]
     .map(([uploadedMs, newestEventMs]) => ({ uploadedMs, newestEventMs }))
     .sort((a, b) => a.uploadedMs - b.uploadedMs);
+}
+
+/** A stretch of constant basal rate (U/hr). */
+export interface BasalSpan {
+  startMs: number;
+  endMs: number;
+  rate: number;
+}
+
+/**
+ * Delivered basal from Temp Basal treatments, oldest first. Each span ends at
+ * its recorded duration or the next span's start, whichever is first.
+ */
+export function parseBasalSpans(treatments: Treatment[]): BasalSpan[] {
+  const raw = treatments
+    .filter((t) => t.eventType === 'Temp Basal')
+    .map((t) => ({
+      startMs: treatmentTimeMs(t),
+      rate: num(t.absolute) ?? num(t.rate),
+      minutes: num(t.duration) ?? 0,
+    }))
+    .filter((t): t is { startMs: number; rate: number; minutes: number } => t.startMs !== null && t.rate !== null)
+    .sort((a, b) => a.startMs - b.startMs);
+  return raw.map((t, i) => {
+    const next = raw[i + 1]?.startMs ?? Infinity;
+    return { startMs: t.startMs, endMs: Math.min(t.startMs + Math.max(t.minutes, 0) * 60_000, next), rate: t.rate };
+  }).filter((s) => s.endMs > s.startMs);
+}
+
+/** The span covering `timeMs`, or null. */
+export function spanAt(spans: BasalSpan[], timeMs: number): BasalSpan | null {
+  return spans.find((s) => s.startMs <= timeMs && timeMs < s.endMs) ?? null;
+}
+
+/** Profile basal schedules change on quarter-hour boundaries in every real timezone. */
+const PROFILE_STEP_MS = 15 * 60_000;
+
+/** The default profile's scheduled basal as spans covering [startMs, endMs). */
+export function profileSpans(profile: ProfileDoc | null, startMs: number, endMs: number): BasalSpan[] {
+  const spans: BasalSpan[] = [];
+  for (let t = Math.floor(startMs / PROFILE_STEP_MS) * PROFILE_STEP_MS; t < endMs; t += PROFILE_STEP_MS) {
+    const rate = scheduledBasal(profile, t);
+    if (rate === null) continue;
+    const from = Math.max(t, startMs);
+    const to = Math.min(t + PROFILE_STEP_MS, endMs);
+    const last = spans[spans.length - 1];
+    if (last && last.rate === rate && last.endMs === from) last.endMs = to;
+    else spans.push({ startMs: from, endMs: to, rate });
+  }
+  return spans;
 }
