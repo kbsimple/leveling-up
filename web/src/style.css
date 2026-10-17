@@ -177,9 +177,10 @@ input {
   clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
 .boluses .auto .marker { background: var(--series-auto); border-radius: 50%; }
-.boluses .time { color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
-.boluses .line1 { font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
-.boluses .line2 { grid-column: 3; font-size: var(--fs-sm); color: var(--text-secondary); }
+.boluses li { font-size: var(--fs-sm); }
+.boluses .time { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.boluses .line1 { font-variant-numeric: tabular-nums; }
+.boluses .line2 { grid-column: 3; color: var(--text-secondary); }
 
 .freshness { color: var(--text-muted); }
 .freshness.stale { color: var(--danger); }
@@ -200,8 +201,8 @@ input {
 }
 .segmented button + button { border-left: 1px solid var(--border); }
 .segmented button.on { background: var(--accent); color: #fff; }
-.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: var(--fs-md); }
-.facts dt { font-size: var(--fs-sm); color: var(--text-muted); align-self: baseline; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: var(--fs-sm); }
+.facts dt { color: var(--text-muted); }
 .facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 /* Graph */
