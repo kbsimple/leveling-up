@@ -53,7 +53,7 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
   `TIMEZONE_NAME=America/Los_Angeles` (fixes the -04:00 timestamp issue).
   A 1-day sync uploaded 21 boluses (`Combo Bolus`, with carbs and BG), 420
   `Temp Basal` and 1 `Basal Suspension` treatments. It took ~2 min, mostly the
-  basal uploads. `PROFILES` was left out to avoid overwriting NS profiles.
+  basal uploads. 
   The IOB feature produced no devicestatus in tconnectsync 3.0.3.
 - **Dexcom -> NS:** `spikes/dexcom_to_nightscout.py` (pydexcom) posts `sgv`
   entries tagged `device=leveling-up (dexcom-share)` and only uploads readings
@@ -62,6 +62,11 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
   glucose, direction, delta, IOB and COB. IOB/COB are computed by Nightscout
   from the uploaded treatments, not reported by the pump. With no NS profile,
   these use defaults and may differ from the pump's IOB.
+- **Profiles:** the NS default profile was stale. `--features PROFILES` with
+  `NIGHTSCOUT_PROFILE_UPLOAD_MODE=replace` updated the latest NS profile doc
+  in place: added the pump's active profile (`frog`, 16 basal segments,
+  DIA 3.0) and made it the default. Older profile entries remain in the
+  store. Include PROFILES in the regular sync so NS tracks pump changes.
 - Not yet scheduled: both syncs were run once by hand.
 
 ### Implications
