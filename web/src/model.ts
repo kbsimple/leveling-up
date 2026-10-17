@@ -338,6 +338,12 @@ export interface BasalSpan {
   startMs: number;
   endMs: number;
   rate: number;
+  /** True while a user-set temp rate was active. */
+  temp?: boolean;
+  /** The temp rate setting in U/hr, when recorded. */
+  tempRate?: number | null;
+  /** The profile's rate at the time, when recorded. */
+  profileRate?: number | null;
 }
 
 /**
@@ -347,16 +353,30 @@ export interface BasalSpan {
 export function parseBasalSpans(treatments: Treatment[]): BasalSpan[] {
   const raw = treatments
     .filter((t) => t.eventType === 'Temp Basal')
-    .map((t) => ({
-      startMs: treatmentTimeMs(t),
-      rate: num(t.absolute) ?? num(t.rate),
-      minutes: num(t.duration) ?? 0,
-    }))
-    .filter((t): t is { startMs: number; rate: number; minutes: number } => t.startMs !== null && t.rate !== null)
+    .map((t) => {
+      const tempRate = num(t.tempRate);
+      return {
+        startMs: treatmentTimeMs(t),
+        rate: num(t.absolute) ?? num(t.rate),
+        minutes: num(t.duration) ?? 0,
+        // Older records lack tempRate but say "TempRate..." in reason.
+        temp: tempRate !== null || (typeof t.reason === 'string' && t.reason.includes('TempRate')),
+        tempRate,
+        profileRate: num(t.profileRate),
+      };
+    })
+    .filter((t): t is typeof t & { startMs: number; rate: number } => t.startMs !== null && t.rate !== null)
     .sort((a, b) => a.startMs - b.startMs);
   return raw.map((t, i) => {
     const next = raw[i + 1]?.startMs ?? Infinity;
-    return { startMs: t.startMs, endMs: Math.min(t.startMs + Math.max(t.minutes, 0) * 60_000, next), rate: t.rate };
+    return {
+      startMs: t.startMs,
+      endMs: Math.min(t.startMs + Math.max(t.minutes, 0) * 60_000, next),
+      rate: t.rate,
+      temp: t.temp,
+      tempRate: t.tempRate,
+      profileRate: t.profileRate,
+    };
   }).filter((s) => s.endMs > s.startMs);
 }
 
@@ -381,4 +401,36 @@ export function profileSpans(profile: ProfileDoc | null, startMs: number, endMs:
     else spans.push({ startMs: from, endMs: to, rate });
   }
   return spans;
+}
+
+/** A continuous user-set temp rate. */
+export interface TempPeriod {
+  startMs: number;
+  endMs: number;
+  /** Temp rate setting in U/hr, when recorded. */
+  rate: number | null;
+  /** Setting as a percentage of the profile rate, when both are recorded. */
+  percent: number | null;
+  /** True when the temp rate was still on in the newest basal record. */
+  open: boolean;
+}
+
+/** Temp rate periods from basal spans, oldest first; a change of setting starts a new period. */
+export function tempPeriods(spans: BasalSpan[]): TempPeriod[] {
+  const periods: TempPeriod[] = [];
+  const last = spans[spans.length - 1];
+  for (const sp of spans) {
+    if (!sp.temp) continue;
+    const rate = sp.tempRate ?? null;
+    const percent = rate !== null && sp.profileRate ? Math.round((rate / sp.profileRate) * 100) : null;
+    const prev = periods[periods.length - 1];
+    if (prev && prev.endMs === sp.startMs && prev.rate === rate && prev.percent === percent) {
+      prev.endMs = sp.endMs;
+    } else {
+      periods.push({ startMs: sp.startMs, endMs: sp.endMs, rate, percent, open: false });
+    }
+  }
+  const final = periods[periods.length - 1];
+  if (final && last && final.endMs === last.endMs) final.open = true;
+  return periods;
 }

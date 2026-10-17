@@ -11,7 +11,7 @@ from typing import Any, Callable, Optional
 
 import arrow
 
-from leveling_up import bolus_details, sync_status
+from leveling_up import basal_details, bolus_details, sync_status
 from leveling_up.config import Config
 from leveling_up.nightscout import NightscoutClient
 
@@ -75,6 +75,7 @@ class TandemSync:
                 NightscoutEntry.tandemsource_profile_store, config.insulin_duration_hours))
             NightscoutEntry._leveling_up_dia = True
         bolus_details.install()
+        basal_details.install()
 
         self._secret = secret
         self._process_cls = ProcessTimeRange

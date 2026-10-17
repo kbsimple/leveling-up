@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  formatAge, formatDelta, formatDuration, formatIob, formatRate, isStale, u,
+  formatAge, formatDelta, formatDuration, formatIob, formatRate, formatTempSetting, isStale, u,
 } from '../src/format';
 import {
   latestTreatmentMs, parseBasalSpans, parseEntries, parsePebble, parsePumpState, parseUploadHistory,
-  profileSpans, scheduledBasal, spanAt,
+  profileSpans, scheduledBasal, spanAt, tempPeriods,
   treatmentTimeMs,
   type ProfileDoc,
 } from '../src/model';
@@ -174,7 +174,7 @@ describe('basal spans', () => {
       { eventType: 'Temp Basal', created_at: '2026-10-17T17:50:00Z', absolute: 0, duration: 30 },
       { eventType: 'Combo Bolus', created_at: '2026-10-17T17:55:00Z', insulin: 1 },
     ]);
-    expect(spans).toEqual([
+    expect(spans).toMatchObject([
       { startMs: ms('2026-10-17T17:50:00Z'), endMs: ms('2026-10-17T18:00:00Z'), rate: 0 },
       { startMs: ms('2026-10-17T18:00:00Z'), endMs: ms('2026-10-17T18:05:00Z'), rate: 0.52 },
       { startMs: ms('2026-10-17T18:05:00Z'), endMs: ms('2026-10-17T18:15:00Z'), rate: 0.41 },
@@ -190,5 +190,40 @@ describe('basal spans', () => {
       { startMs: ms('2026-10-17T09:00:00Z'), endMs: ms('2026-10-17T10:00:00Z'), rate: 0.35 },
     ]);
     expect(profileSpans(null, 0, 3_600_000)).toEqual([]);
+  });
+});
+
+describe('temp rate periods', () => {
+  const tb = (at: string, rate: number, extra: Record<string, unknown> = {}) => ({
+    eventType: 'Temp Basal', created_at: at, absolute: rate, duration: 5, ...extra,
+  });
+
+  it('merges consecutive temp spans and computes the percentage', () => {
+    const spans = parseBasalSpans([
+      tb('2026-10-17T07:30:00Z', 0.4, { profileRate: 0.4, reason: 'Algorithm' }),
+      tb('2026-10-17T07:35:00Z', 0.1, { tempRate: 0.1, profileRate: 0.4, reason: 'TempRateAndAlgorithm' }),
+      tb('2026-10-17T07:40:00Z', 1.375, { tempRate: 0.1, profileRate: 0.4, reason: 'TempRateAndAlgorithm' }),
+      tb('2026-10-17T07:45:00Z', 0.85, { tempRate: 0.85, profileRate: 0.425, reason: 'TempRateAndAlgorithm' }),
+      tb('2026-10-17T07:50:00Z', 0.4, { profileRate: 0.4, reason: 'Algorithm' }),
+    ]);
+    expect(tempPeriods(spans)).toEqual([
+      { startMs: ms('2026-10-17T07:35:00Z'), endMs: ms('2026-10-17T07:45:00Z'), rate: 0.1, percent: 25, open: false },
+      { startMs: ms('2026-10-17T07:45:00Z'), endMs: ms('2026-10-17T07:50:00Z'), rate: 0.85, percent: 200, open: false },
+    ]);
+  });
+
+  it('marks a temp rate still on in the newest record, and handles records without details', () => {
+    const spans = parseBasalSpans([
+      tb('2026-10-17T07:30:00Z', 0.4, { reason: 'Algorithm' }),
+      tb('2026-10-17T07:35:00Z', 0.8, { reason: 'TempRateAndAlgorithm' }),
+    ]);
+    expect(tempPeriods(spans)).toEqual([
+      { startMs: ms('2026-10-17T07:35:00Z'), endMs: ms('2026-10-17T07:40:00Z'), rate: null, percent: null, open: true },
+    ]);
+  });
+
+  it('formats the setting', () => {
+    expect(formatTempSetting({ rate: 0.1, percent: 25 })).toBe('25% (0.1 U/hr)');
+    expect(formatTempSetting({ rate: null, percent: null })).toBe('on');
   });
 });

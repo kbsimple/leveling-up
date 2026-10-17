@@ -1,7 +1,7 @@
 // Display formatting. The bolus wording mirrors the Android widget's Format.kt;
 // both are checked against fixtures/bolus-cases.json.
 
-import type { Bolus, Glucose, SyncStatus } from './model';
+import type { Bolus, Glucose, SyncStatus, TempPeriod } from './model';
 
 /** Glucose older than this is shown as stale. */
 export const STALE_GLUCOSE_MINUTES = 12;
@@ -139,4 +139,12 @@ export function formatSyncStatus(status: SyncStatus, nowMs: number): { text: str
     || older(status.pumpUploadedMs, STALE_PUMP_UPLOAD_MINUTES)
     || older(status.syncedMs, STALE_SYNC_MINUTES);
   return { text: `${pump} · ${sync}`, stale };
+}
+
+/** "25% (0.1 U/hr)", "25%", "0.1 U/hr", or "on" when the setting wasn't recorded. */
+export function formatTempSetting(period: Pick<TempPeriod, 'rate' | 'percent'>): string {
+  if (period.percent !== null && period.rate !== null) return `${period.percent}% (${formatRate(period.rate)})`;
+  if (period.percent !== null) return `${period.percent}%`;
+  if (period.rate !== null) return formatRate(period.rate);
+  return 'on';
 }

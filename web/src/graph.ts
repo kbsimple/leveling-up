@@ -3,8 +3,8 @@
 // Colors come from CSS custom properties (see style.css); tooltip text is set
 // with textContent only.
 
-import { ago, formatBolus, formatBolusDetail, formatClock, formatRate } from './format';
-import { spanAt, type BasalSpan, type Bolus, type PumpUpload, type Reading } from './model';
+import { ago, formatBolus, formatBolusDetail, formatClock, formatDuration, formatRate, formatTempSetting } from './format';
+import { spanAt, type BasalSpan, type Bolus, type PumpUpload, type Reading, type TempPeriod } from './model';
 
 export const TARGET_LOW = 70;
 export const TARGET_HIGH = 180;
@@ -22,13 +22,15 @@ export interface TandemTimeline {
 export interface BasalTimeline {
   delivered: BasalSpan[];
   profile: BasalSpan[];
+  temps: TempPeriod[];
 }
 
 const SVG = 'http://www.w3.org/2000/svg';
 const PAD = { top: 12, right: 12, left: 34 };
 const PLOT_BOTTOM = 186; // glucose plot
 const BOLUS_Y = PLOT_BOTTOM + 16; // bolus marker lane
-const BASAL_TOP = PLOT_BOTTOM + 30; // basal panel
+const TEMP_BAR_Y = BOLUS_Y + 24; // temp rate bars, labeled above, clear of bolus markers
+const BASAL_TOP = TEMP_BAR_Y + 8; // basal panel
 const BASAL_BOTTOM = BASAL_TOP + 44;
 const TANDEM_Y = BASAL_BOTTOM + 16; // pump upload / Nightscout sync lane
 const LABEL_Y = TANDEM_Y + 26; // x axis labels
@@ -48,7 +50,7 @@ type Lane = 'plot' | 'bolus' | 'basal' | 'tandem';
 /** Which horizontal band a chart y coordinate falls in. */
 function laneAt(py: number): Lane {
   if (py <= PLOT_BOTTOM + 4) return 'plot';
-  if (py < BASAL_TOP - 3) return 'bolus';
+  if (py < TEMP_BAR_Y - 4) return 'bolus';
   if (py <= BASAL_BOTTOM + 5) return 'basal';
   return 'tandem';
 }
@@ -57,6 +59,12 @@ type Marker =
   | { lane: 'bolus'; cx: number; ms: number; bolus: Bolus }
   | { lane: 'tandem'; cx: number; ms: number; upload: PumpUpload }
   | { lane: 'tandem'; cx: number; ms: number; sync: true };
+
+/** "12:35–1:50 AM (1h 15m)" or "since 12:35 PM, on at last upload". */
+function tempSpanText(p: TempPeriod): string {
+  if (p.open) return `Since ${formatClock(p.startMs)}, on at last upload`;
+  return `${formatClock(p.startMs)}–${formatClock(p.endMs)} (${formatDuration((p.endMs - p.startMs) / 60_000)})`;
+}
 
 function el<K extends keyof SVGElementTagNameMap>(
   tag: K, attrs: Record<string, string | number>, parent?: Element,
@@ -188,6 +196,28 @@ export function renderGraph(
     profileLine += `${join}${by(sp.rate).toFixed(1)}H${clampX(sp.endMs).toFixed(1)}`;
   }
   if (edge) el('path', { d: edge, class: 'basal-edge' }, svg);
+
+  // Temp rates: a texture over the steps delivered under one, and a labeled bar above the panel.
+  const temps = basal.temps.filter((p) => p.endMs > startMs && p.startMs < nowMs);
+  const tempArea = delivered.filter((sp) => sp.temp)
+    .map((sp) => `M${clampX(sp.startMs).toFixed(1)},${BASAL_BOTTOM}V${by(sp.rate).toFixed(1)}H${clampX(sp.endMs).toFixed(1)}V${BASAL_BOTTOM}Z`)
+    .join('');
+  if (tempArea) {
+    const pattern = el('pattern', {
+      id: 'temp-hatch', width: 4, height: 4, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(-45)',
+    }, el('defs', {}, svg));
+    el('line', { x1: 0, y1: 0, x2: 0, y2: 4, class: 'temp-hatch-line' }, pattern);
+    el('path', { d: tempArea, fill: 'url(#temp-hatch)' }, svg);
+  }
+  for (const p of temps) {
+    const x1 = clampX(p.startMs);
+    const w = Math.max(clampX(p.endMs) - x1, 3);
+    el('rect', { x: x1, y: TEMP_BAR_Y - 2, width: w, height: 4, rx: 2, class: 'temp-bar' }, svg);
+    const label = p.percent !== null ? `Temp ${p.percent}%` : 'Temp';
+    if (w >= 40) {
+      el('text', { x: x1 + 1, y: TEMP_BAR_Y - 5, class: 'temp-label' }, svg).textContent = label;
+    }
+  }
   if (profileLine) el('path', { d: profileLine, class: 'basal-profile' }, svg);
 
   // Tandem lane: pump -> Tandem uploads (diamonds) and the last Nightscout sync (ring).
@@ -212,6 +242,9 @@ export function renderGraph(
   host.appendChild(tooltip);
 
   const hit = el('rect', { x: PAD.left, y: 0, width: right - PAD.left, height: HEIGHT, class: 'hit' }, svg);
+
+  const tempPercent = (sp: BasalSpan): number | null =>
+    sp.tempRate != null && sp.profileRate ? Math.round((sp.tempRate / sp.profileRate) * 100) : null;
 
   /** "Profile 0.65 U/hr · 37% below" for a delivered rate at `atMs`. */
   const profileNote = (atMs: number, rate: number): string => {
@@ -255,13 +288,18 @@ export function renderGraph(
         .filter((m) => m.lane === lane && Math.abs(m.cx - px) <= HIT_PX)
         .sort((a, b) => Math.abs(a.cx - px) - Math.abs(b.cx - px))[0] ?? null;
     }
-    const basalSpan = lane === 'basal' ? spanAt(delivered, Math.min(ms, nowMs - 1)) : null;
-    const nearest = marker || basalSpan ? null : visible.reduce<Reading | null>(
+    // The temp bar row sits at the top of the basal band.
+    const temp = lane === 'basal' && py < BASAL_TOP + 2
+      ? temps.find((p) => px >= clampX(p.startMs) - 6 && px <= clampX(p.endMs) + 6) ?? null
+      : null;
+    const basalSpan = lane === 'basal' && !temp ? spanAt(delivered, Math.min(ms, nowMs - 1)) : null;
+    const nearest = marker || basalSpan || temp ? null : visible.reduce<Reading | null>(
       (best, r) => (!best || Math.abs(r.timeMs - ms) < Math.abs(best.timeMs - ms) ? r : best), null);
-    if (!marker && !basalSpan && !nearest) return hide();
+    if (!marker && !basalSpan && !temp && !nearest) return hide();
 
     const key = marker ? `${marker.lane}:${marker.ms}`
-      : basalSpan ? `basal:${basalSpan.startMs}` : `glucose:${nearest!.timeMs}`;
+      : temp ? `temp:${temp.startMs}`
+        : basalSpan ? `basal:${basalSpan.startMs}` : `glucose:${nearest!.timeMs}`;
     if (toggle && !tooltip.hidden && key === shownKey) {
       hide();
       dismissedKey = key;
@@ -271,7 +309,8 @@ export function renderGraph(
     dismissedKey = null;
     shownKey = key;
 
-    const atMs = marker ? marker.ms : basalSpan ? Math.min(Math.max(ms, startMs), nowMs) : nearest!.timeMs;
+    const atMs = marker ? marker.ms : temp ? Math.max(temp.startMs, startMs)
+      : basalSpan ? Math.min(Math.max(ms, startMs), nowMs) : nearest!.timeMs;
     crosshair.setAttribute('x1', String(x(Math.min(atMs, nowMs))));
     crosshair.setAttribute('x2', String(x(Math.min(atMs, nowMs))));
     crosshair.setAttribute('visibility', 'visible');
@@ -293,14 +332,21 @@ export function renderGraph(
         ...(u.newestEventMs !== null ? [`Pump data through ${formatClock(u.newestEventMs)}`] : []));
     } else if (marker) {
       lines('Synced to Nightscout', `${formatClock(marker.ms)} (${ago(marker.ms, nowMs)})`);
+    } else if (temp) {
+      lines(`Temp rate ${formatTempSetting(temp)}`, tempSpanText(temp));
     } else if (basalSpan) {
+      const tempNote = basalSpan.temp
+        ? [`Temp rate ${formatTempSetting({ rate: basalSpan.tempRate ?? null, percent: tempPercent(basalSpan) })} active`]
+        : [];
       lines(`Basal ${formatRate(basalSpan.rate)}`,
-        `${formatClock(basalSpan.startMs)}–${formatClock(basalSpan.endMs)}`, profileNote(basalSpan.startMs, basalSpan.rate));
+        `${formatClock(basalSpan.startMs)}–${formatClock(basalSpan.endMs)}`, profileNote(basalSpan.startMs, basalSpan.rate),
+        ...tempNote);
     } else {
       const pending = pendingFromMs !== null && nearest!.timeMs > pendingFromMs;
       const at = spanAt(delivered, nearest!.timeMs);
+      const atTemp = at?.temp ? ` · temp ${tempPercent(at) !== null ? `${tempPercent(at)}%` : 'on'}` : '';
       lines(`${nearest!.mgdl} mg/dL`, formatClock(nearest!.timeMs),
-        ...(at ? [`Basal ${formatRate(at.rate)}`] : []),
+        ...(at ? [`Basal ${formatRate(at.rate)}${atTemp}`] : []),
         ...(pending ? ['Pump data not uploaded yet'] : []));
     }
     tooltip.hidden = false;

@@ -170,6 +170,16 @@ treatments as a stepped area, the profile schedule as a dashed step line.
 Tapping it shows the rate, its time span, and the difference from profile;
 the glucose readout also lists the basal rate at that time.
 
+**Temp rates:** Tandem Source has no temp-rate start/stop events, but every
+5-minute basal delivery event carries the temp rate setting (`tempRate`,
+65535 = none) next to the profile and Control-IQ rates. `basal_details.py`
+adds `profileRate`, `algorithmRate` and `tempRate` (U/hr) to each Temp Basal
+treatment; the last 3 days were re-uploaded. The web app merges consecutive
+temp-rate steps into periods (percentage = temp ÷ profile; the planned
+duration isn't recorded, so the actual span is shown) and draws a labeled bar
+above the basal panel plus a texture on those steps. The basal card lists
+temp rates from the last 24 hours.
+
 ## Open questions
 
 - **Widget app:** reuse an existing Nightscout client (leading candidate:

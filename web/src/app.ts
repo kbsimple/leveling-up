@@ -3,10 +3,10 @@
 
 import {
   arrow, formatAge, formatBolus, formatBolusDetail, formatClock, formatDelta, formatDuration,
-  formatIob, formatRate, formatSyncStatus, isStale,
+  formatIob, formatRate, formatSyncStatus, formatTempSetting, isStale,
 } from './format';
 import { renderGraph, TARGET_HIGH, TARGET_LOW } from './graph';
-import { BOLUS_WINDOW_MINUTES, parseBasalSpans, profileSpans, type Bolus } from './model';
+import { BOLUS_WINDOW_MINUTES, parseBasalSpans, profileSpans, tempPeriods, type Bolus } from './model';
 import { bolusesIn, fetchData, NightscoutError, pumpStateIn, type Data } from './nightscout';
 import {
   forgetSettings, loadPref, loadSettings, normalizeUrl, savePref, saveSettings, type Settings,
@@ -249,6 +249,7 @@ export class App {
         h('span', { class: 'key key-band' }, `Target ${TARGET_LOW}–${TARGET_HIGH}`),
         h('span', { class: 'key key-basal' }, 'Basal (U/hr)'),
         h('span', { class: 'key key-profile' }, 'Profile basal'),
+        h('span', { class: 'key key-temp' }, 'Temp rate'),
         h('span', { class: 'key key-upload' }, 'Pump → Tandem upload'),
         h('span', { class: 'key key-sync' }, 'Nightscout sync'),
         h('span', { class: 'key key-pending' }, 'Not uploaded yet')));
@@ -263,10 +264,14 @@ export class App {
       fetchedMs, sync || this.data.uploads.length
         ? { uploads: this.data.uploads, newestEventMs: sync?.newestEventMs ?? null, syncedMs: sync?.syncedMs ?? null }
         : null,
-      {
-        delivered: parseBasalSpans(this.data.treatments),
-        profile: profileSpans(this.data.profile, fetchedMs - this.graphHours * 3_600_000, fetchedMs),
-      });
+      (() => {
+        const delivered = parseBasalSpans(this.data.treatments);
+        return {
+          delivered,
+          profile: profileSpans(this.data.profile, fetchedMs - this.graphHours * 3_600_000, fetchedMs),
+          temps: tempPeriods(delivered),
+        };
+      })());
   }
 
   private bolusSection(data: Data): HTMLElement {
@@ -305,6 +310,13 @@ export class App {
     rows.push(['Control-IQ', [m
       ? (m.open ? `${m.kind} since ${formatClock(m.startMs)}` : `${m.kind} ${formatClock(m.startMs)}–${formatClock(m.endMs)}`)
       : 'Normal']]);
+
+    tempPeriods(parseBasalSpans(data.treatments)).reverse().forEach((p, i) => {
+      const when = p.open
+        ? `since ${dayPrefix(p.startMs, data.fetchedMs)}${formatClock(p.startMs)}`
+        : `${dayPrefix(p.startMs, data.fetchedMs)}${formatClock(p.startMs)}–${formatClock(p.endMs)}`;
+      rows.push([i === 0 ? 'Temp rate' : '', [`${when} · ${formatTempSetting(p)}`]]);
+    });
 
     state.suspensions.forEach((s, i) => {
       const length = s.resumedMs ? `for ${formatDuration((s.resumedMs - s.startMs) / 60_000)}` : 'not resumed';

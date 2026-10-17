@@ -218,6 +218,16 @@ input {
 .bolus-auto { fill: var(--series-auto); stroke: var(--surface-1); stroke-width: 2; }
 .basal-area { fill: var(--series-basal); opacity: 0.35; }
 .basal-edge { fill: none; stroke: var(--series-basal); stroke-width: 1.5; }
+.temp-hatch-line { stroke: var(--series-basal); stroke-width: 1.5; }
+.temp-bar { fill: var(--text-secondary); }
+.temp-label {
+  fill: var(--text-secondary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--surface-1);
+  stroke-width: 3px;
+}
 .basal-profile { fill: none; stroke: var(--text-secondary); stroke-width: 1.5; stroke-dasharray: 4 3; }
 .tandem-upload { fill: var(--text-secondary); stroke: var(--surface-1); stroke-width: 2; }
 .ns-sync { fill: var(--surface-1); stroke: var(--text-secondary); stroke-width: 2; }
@@ -250,6 +260,10 @@ input {
 .key-auto::before { width: 9px; height: 9px; background: var(--series-auto); border-radius: 50%; }
 .key-basal::before { width: 14px; height: 10px; background: color-mix(in srgb, var(--series-basal) 35%, transparent); border-top: 2px solid var(--series-basal); }
 .key-profile::before { width: 14px; height: 0; border-top: 2px dashed var(--text-secondary); }
+.key-temp::before {
+  width: 14px; height: 10px; border-top: 3px solid var(--text-secondary);
+  background: repeating-linear-gradient(-45deg, var(--series-basal) 0 1.5px, transparent 1.5px 4px);
+}
 .key-upload::before { width: 8px; height: 8px; background: var(--text-secondary); transform: rotate(45deg); margin-left: 1px; }
 .key-sync::before { width: 7px; height: 7px; border: 2px solid var(--text-secondary); border-radius: 50%; }
 .key-pending::before {
