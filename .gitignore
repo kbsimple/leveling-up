@@ -1,0 +1,24 @@
+# Secrets
+.env
+.env.*
+*.pem
+secrets/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+node_modules/
+
+# Android
+*.apk
+local.properties
+.gradle/
+build/
+.idea/
+
+# OS
+.DS_Store
