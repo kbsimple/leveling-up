@@ -1,5 +1,6 @@
 """Minimal Nightscout REST client."""
 
+import datetime
 import hashlib
 from typing import Any, Optional
 
@@ -43,17 +44,23 @@ class NightscoutClient:
     def post_devicestatus(self, status: dict) -> None:
         self._request("POST", "api/v1/devicestatus", json=status)
 
-    def prune_devicestatus(self, device: str, keep: int) -> int:
-        """Deletes all but the newest `keep` devicestatus records from `device`.
+    def prune_devicestatus(self, device: str, older_than: datetime.datetime) -> int:
+        """Deletes `device`'s devicestatus records created before `older_than`.
 
-        Returns the number deleted.
+        The newest record is always kept. Returns the number deleted.
         """
         records = self._request(
-            "GET", "api/v1/devicestatus.json", params={"count": keep + 100, "find[device]": device})
-        stale = [r for r in records if r.get("device") == device][keep:]
+            "GET", "api/v1/devicestatus.json", params={"count": 1000, "find[device]": device})
+        mine = [r for r in records if r.get("device") == device and r.get("created_at")]
+        mine.sort(key=lambda r: r["created_at"], reverse=True)
+        stale = [r for r in mine[1:] if _parse_time(r["created_at"]) < older_than]
         for record in stale:
             self._request("DELETE", f"api/v1/devicestatus/{record['_id']}")
         return len(stale)
+
+
+def _parse_time(value: str) -> datetime.datetime:
+    return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def prune_profile_doc(doc: dict, insulin_duration_hours: float) -> dict:

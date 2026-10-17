@@ -158,6 +158,12 @@ upload is over 75 minutes old, the last sync over 35 minutes old, or the sync is
 failing. `fixtures/sync-status-cases.json` keeps the widget and site identical.
 The site's basal section and `/statusz/` show the individual times.
 
+The site's glucose graph has a Tandem lane under the bolus lane: a diamond
+per distinct pump → Tandem upload, a ring at the last Nightscout sync, and a
+hatched band from the newest pump event to now ("not uploaded yet"), so
+missing boluses/basal at the right edge are explained on the chart. Records
+are kept for 26 hours (pruned by age) so the 24h view has upload history.
+
 ## Open questions
 
 - **Widget app:** reuse an existing Nightscout client (leading candidate:

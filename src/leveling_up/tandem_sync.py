@@ -134,7 +134,8 @@ class TandemSync:
                                           self._newest_event_at, self._upload_client, error)
         try:
             self._status_client.post_devicestatus(status)
-            self._status_client.prune_devicestatus(sync_status.DEVICE, sync_status.KEEP_RECORDS)
+            self._status_client.prune_devicestatus(
+                sync_status.DEVICE, checked_at - sync_status.RETENTION)
         except Exception:  # pylint: disable=broad-except
             # Freshness is informational; never fail the sync over it.
             logger.warning("could not publish sync status", exc_info=True)

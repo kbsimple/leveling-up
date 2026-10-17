@@ -19,7 +19,8 @@ service posts:
       }
     }
 
-The widget and web app read the newest record; the field names are part of
+The widget and web app read the newest record, and the web graph plots the
+distinct pump uploads across the retained records; the field names are part of
 that contract (see fixtures/sync-status-cases.json).
 """
 
@@ -28,8 +29,9 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 DEVICE = "leveling-up"
-# Records kept in Nightscout; older ones are deleted after each post.
-KEEP_RECORDS = 12
+# How long records are kept; older ones are deleted after each post. Covers the
+# web graph's widest (24h) window, which plots each pump upload.
+RETENTION = datetime.timedelta(hours=26)
 
 
 def _iso(value: Optional[datetime.datetime]) -> Optional[str]:

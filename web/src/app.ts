@@ -246,14 +246,20 @@ export class App {
         h('span', { class: 'key key-line' }, 'Glucose'),
         h('span', { class: 'key key-manual' }, 'Manual bolus'),
         h('span', { class: 'key key-auto' }, 'Auto bolus'),
-        h('span', { class: 'key key-band' }, `Target ${TARGET_LOW}–${TARGET_HIGH}`)));
+        h('span', { class: 'key key-band' }, `Target ${TARGET_LOW}–${TARGET_HIGH}`),
+        h('span', { class: 'key key-upload' }, 'Pump → Tandem upload'),
+        h('span', { class: 'key key-sync' }, 'Nightscout sync'),
+        h('span', { class: 'key key-pending' }, 'Not uploaded yet')));
   }
 
   private renderGraphOnly(): void {
     const host = document.getElementById('graph');
     if (!host || !this.data) return;
+    const sync = this.data.sync;
     renderGraph(host, this.data.readings, bolusesIn(this.data, this.graphHours), this.graphHours,
-      this.data.fetchedMs);
+      this.data.fetchedMs, sync || this.data.uploads.length
+        ? { uploads: this.data.uploads, newestEventMs: sync?.newestEventMs ?? null, syncedMs: sync?.syncedMs ?? null }
+        : null);
   }
 
   private bolusSection(data: Data): HTMLElement {

@@ -298,3 +298,30 @@ export function parseSyncStatus(records: unknown): SyncStatus | null {
     error: typeof t.error === 'string' && t.error ? t.error : null,
   };
 }
+
+/** One pump -> Tandem cloud upload and how far its data reached. */
+export interface PumpUpload {
+  uploadedMs: number;
+  newestEventMs: number | null;
+}
+
+/**
+ * Distinct pump uploads recorded across leveling-up's devicestatus records,
+ * oldest first. Each sync run records Tandem's latest upload, so the same
+ * upload usually appears in several records.
+ */
+export function parseUploadHistory(records: unknown): PumpUpload[] {
+  if (!Array.isArray(records)) return [];
+  const byUpload = new Map<number, number | null>();
+  for (const r of records as Record<string, unknown>[]) {
+    const tandem = (r?.levelingUp as { tandem?: Record<string, unknown> } | undefined)?.tandem;
+    const uploadedMs = isoMs(tandem?.pumpUploadedAt);
+    if (uploadedMs === null) continue;
+    const newest = isoMs(tandem?.newestEventAt);
+    const known = byUpload.get(uploadedMs);
+    byUpload.set(uploadedMs, known === undefined || known === null ? newest : Math.max(known, newest ?? known));
+  }
+  return [...byUpload.entries()]
+    .map(([uploadedMs, newestEventMs]) => ({ uploadedMs, newestEventMs }))
+    .sort((a, b) => a.uploadedMs - b.uploadedMs);
+}

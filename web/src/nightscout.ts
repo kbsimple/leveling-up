@@ -3,7 +3,8 @@
 
 import {
   latestTreatmentMs, parseBoluses, parseEntries, parsePebble, parsePumpState, parseSyncStatus,
-  type Bolus, type Glucose, type ProfileDoc, type PumpState, type Reading, type SyncStatus, type Treatment,
+  parseUploadHistory, type Bolus, type Glucose, type ProfileDoc, type PumpState, type PumpUpload,
+  type Reading, type SyncStatus, type Treatment,
 } from './model';
 import type { Settings } from './storage';
 
@@ -21,6 +22,8 @@ export interface Data {
   pumpDataMs: number | null;
   /** Freshness published by leveling-up's sync; null if none. */
   sync: SyncStatus | null;
+  /** Distinct pump -> Tandem uploads in the window, oldest first. */
+  uploads: PumpUpload[];
 }
 
 async function get(settings: Settings, path: string, params: Record<string, string> = {}): Promise<unknown> {
@@ -46,7 +49,10 @@ export async function fetchData(settings: Settings, nowMs = Date.now()): Promise
       'find[created_at][$gte]': new Date(since).toISOString(), count: '1500',
     }),
     get(settings, 'api/v1/profile.json', { count: '1' }),
-    get(settings, 'api/v1/devicestatus.json', { 'find[device]': 'leveling-up', count: '1' }),
+    // One record per Tandem sync run (every 5-15 min), kept for 26h by the service.
+    get(settings, 'api/v1/devicestatus.json', {
+      'find[device]': 'leveling-up', 'find[created_at][$gte]': new Date(since).toISOString(), count: '400',
+    }),
   ]);
   const list = Array.isArray(treatments) ? (treatments as Treatment[]) : [];
   return {
@@ -57,6 +63,7 @@ export async function fetchData(settings: Settings, nowMs = Date.now()): Promise
     profile: Array.isArray(profiles) && profiles.length ? (profiles[0] as ProfileDoc) : null,
     pumpDataMs: latestTreatmentMs(list, 'Temp Basal'),
     sync: parseSyncStatus(devicestatus),
+    uploads: parseUploadHistory(devicestatus),
   };
 }
 

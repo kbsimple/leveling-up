@@ -183,6 +183,9 @@ ul.plain { padding-left: 18px; margin: 4px 0; font-size: 0.9rem; }
 .glucose-last { fill: var(--series-glucose); stroke: var(--surface-1); stroke-width: 2; }
 .bolus-manual { fill: var(--series-manual); stroke: var(--surface-1); stroke-width: 2; }
 .bolus-auto { fill: var(--series-auto); stroke: var(--surface-1); stroke-width: 2; }
+.tandem-upload { fill: var(--text-secondary); stroke: var(--surface-1); stroke-width: 2; }
+.ns-sync { fill: var(--surface-1); stroke: var(--text-secondary); stroke-width: 2; }
+.pending-hatch-line { stroke: var(--text-muted); stroke-width: 1.5; opacity: 0.35; }
 .crosshair { stroke: var(--text-muted); stroke-width: 1; }
 .crosshair-dot { fill: var(--series-glucose); stroke: var(--surface-1); stroke-width: 2; }
 .hit { fill: transparent; }
@@ -209,6 +212,13 @@ ul.plain { padding-left: 18px; margin: 4px 0; font-size: 0.9rem; }
 .key-line::before { width: 14px; height: 2px; background: var(--series-glucose); }
 .key-manual::before { width: 10px; height: 10px; background: var(--series-manual); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .key-auto::before { width: 9px; height: 9px; background: var(--series-auto); border-radius: 50%; }
+.key-upload::before { width: 8px; height: 8px; background: var(--text-secondary); transform: rotate(45deg); margin-left: 1px; }
+.key-sync::before { width: 7px; height: 7px; border: 2px solid var(--text-secondary); border-radius: 50%; }
+.key-pending::before {
+  width: 14px; height: 10px; border: 1px solid var(--grid);
+  background: repeating-linear-gradient(45deg, var(--text-muted) 0 1.5px, transparent 1.5px 4px);
+  opacity: 0.6;
+}
 .key-band::before { width: 14px; height: 10px; background: var(--band); border: 1px solid var(--grid); }
 
 @media (forced-colors: active) {

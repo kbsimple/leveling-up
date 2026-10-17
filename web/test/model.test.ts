@@ -4,7 +4,8 @@ import {
   formatAge, formatDelta, formatDuration, formatIob, formatRate, isStale, u,
 } from '../src/format';
 import {
-  latestTreatmentMs, parseEntries, parsePebble, parsePumpState, scheduledBasal, treatmentTimeMs,
+  latestTreatmentMs, parseEntries, parsePebble, parsePumpState, parseUploadHistory, scheduledBasal,
+  treatmentTimeMs,
   type ProfileDoc,
 } from '../src/model';
 import { normalizeUrl } from '../src/storage';
@@ -141,5 +142,25 @@ describe('normalizeUrl', () => {
   it('adds https and trims slashes', () => {
     expect(normalizeUrl(' example.com/ ')).toBe('https://example.com');
     expect(normalizeUrl('http://x.test//')).toBe('http://x.test');
+  });
+});
+
+describe('parseUploadHistory', () => {
+  it('collapses repeated uploads and keeps the furthest data point', () => {
+    const rec = (created: string, uploaded: string | null, newest: string | null) => ({
+      device: 'leveling-up', created_at: created,
+      levelingUp: { tandem: { pumpUploadedAt: uploaded, newestEventAt: newest } },
+    });
+    expect(parseUploadHistory([
+      rec('2026-10-17T19:46:00Z', '2026-10-17T19:06:48+00:00', '2026-10-17T12:06:31-07:00'),
+      rec('2026-10-17T19:31:00Z', '2026-10-17T19:06:48+00:00', null),
+      rec('2026-10-17T19:00:00Z', '2026-10-17T18:05:00+00:00', '2026-10-17T11:04:00-07:00'),
+      rec('2026-10-17T18:45:00Z', null, null),
+      { device: 'openaps://x', created_at: '2026-10-17T19:00:00Z' },
+    ])).toEqual([
+      { uploadedMs: ms('2026-10-17T18:05:00Z'), newestEventMs: ms('2026-10-17T18:04:00Z') },
+      { uploadedMs: ms('2026-10-17T19:06:48Z'), newestEventMs: ms('2026-10-17T19:06:31Z') },
+    ]);
+    expect(parseUploadHistory(null)).toEqual([]);
   });
 });
