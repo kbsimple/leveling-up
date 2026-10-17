@@ -1,0 +1,56 @@
+name: Android widget
+
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["android/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "8.14.6"
+
+      - name: Unit tests
+        run: gradle -p android --no-daemon testDebugUnitTest
+
+      - name: Decode signing key
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_B64: ${{ secrets.WIDGET_KEYSTORE_B64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/widget.p12"
+          echo "WIDGET_KEYSTORE_PATH=$RUNNER_TEMP/widget.p12" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        if: github.event_name != 'pull_request'
+        env:
+          WIDGET_KEYSTORE_PASSWORD: ${{ secrets.WIDGET_KEYSTORE_PASSWORD }}
+        run: |
+          gradle -p android --no-daemon assembleRelease
+          cp android/app/build/outputs/apk/release/app-release.apk leveling-up-widget.apk
+
+      - name: Publish release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "widget-${{ github.run_number }}" leveling-up-widget.apk \
+            --title "Widget build ${{ github.run_number }}" \
+            --notes "Built from ${{ github.sha }}." \
+            --latest

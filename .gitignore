@@ -25,3 +25,6 @@ build/
 !.env.example
 *.egg-info/
 logs/
+*.p12
+*.jks
+*.keystore
