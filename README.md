@@ -10,6 +10,26 @@ Nightscout. See [docs/design.md](docs/design.md) for findings and decisions.
 > Display only. This project never sends commands to the pump and is not an
 > alarm system; keep using the official Dexcom and Tandem apps for alerts.
 
+## Android widget
+
+The `android/` app is a home-screen widget showing glucose, trend, change,
+reading age, IOB, and boluses/carbs from the last 2 hours, plus how old the
+pump data is. It refreshes about every 5 minutes; tap it to refresh now.
+
+**Install:** on the phone, download
+[leveling-up-widget.apk](https://github.com/kbsimple/leveling-up/releases/latest/download/leveling-up-widget.apk),
+open it, and allow your browser to install unknown apps when asked. Later
+builds install over it.
+
+**Set up:** open the Leveling Up app, enter the Nightscout URL and a read-only
+access token (Nightscout Admin Tools → Subjects, role `readable`), tap
+**Save and test**, then **Add widget to home screen**.
+
+**Builds:** every push to `main` that touches `android/` runs unit tests in
+GitHub Actions, then builds a signed APK and publishes it as release
+`widget-<run number>`. The signing key lives in repo secrets
+`WIDGET_KEYSTORE_B64` and `WIDGET_KEYSTORE_PASSWORD`.
+
 ## Setup
 
 Requires Python 3.12+.
