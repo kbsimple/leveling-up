@@ -102,3 +102,33 @@ fun formatIob(iob: Double?): String =
 
 fun isStale(glucose: Glucose, nowMs: Long): Boolean =
     nowMs - glucose.timeMs > STALE_GLUCOSE_MINUTES * 60_000
+
+/** Pump uploads to Tandem roughly hourly; later than this is a warning. */
+const val STALE_PUMP_UPLOAD_MINUTES = 75L
+
+/** The service syncs Tandem every 15 minutes; later than this is a warning. */
+const val STALE_SYNC_MINUTES = 35L
+
+private fun ago(thenMs: Long, nowMs: Long): String =
+    formatAge(thenMs, nowMs).let { if (it == "now") "just now" else "$it ago" }
+
+/** One freshness line and whether to show it as a warning. */
+data class SyncLine(val text: String, val stale: Boolean)
+
+/**
+ * "Pump upload 40m ago · synced 2m ago". Checked against
+ * fixtures/sync-status-cases.json, which the web app also runs.
+ */
+fun formatSyncStatus(status: SyncStatus, nowMs: Long): SyncLine {
+    val pump = status.pumpUploadedMs?.let { "Pump upload ${ago(it, nowMs)}" } ?: "Pump upload unknown"
+    val sync = if (status.error != null) {
+        status.syncedMs?.let { "sync failing, last ok ${ago(it, nowMs)}" } ?: "sync failing, never ok"
+    } else {
+        status.syncedMs?.let { "synced ${ago(it, nowMs)}" } ?: "not synced yet"
+    }
+    fun older(ms: Long?, minutes: Long) = ms == null || nowMs - ms > minutes * 60_000
+    val stale = status.error != null ||
+        older(status.pumpUploadedMs, STALE_PUMP_UPLOAD_MINUTES) ||
+        older(status.syncedMs, STALE_SYNC_MINUTES)
+    return SyncLine("$pump · $sync", stale)
+}

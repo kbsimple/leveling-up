@@ -49,6 +49,8 @@ data class Snapshot(
     val pumpDataMs: Long?,
     val fetchedMs: Long,
     val error: String? = null,
+    /** Freshness published by leveling-up's sync; null if none. */
+    val sync: SyncStatus? = null,
 ) {
     fun toJson(): String = JSONObject().apply {
         glucose?.let {
@@ -66,6 +68,7 @@ data class Snapshot(
         pumpDataMs?.let { put("pumpDataMs", it) }
         put("fetchedMs", fetchedMs)
         error?.let { put("error", it) }
+        sync?.let { put("sync", it.toJson()) }
     }.toString()
 
     companion object {
@@ -87,6 +90,7 @@ data class Snapshot(
                 pumpDataMs = if (o.has("pumpDataMs")) o.getLong("pumpDataMs") else null,
                 fetchedMs = o.getLong("fetchedMs"),
                 error = if (o.has("error")) o.getString("error") else null,
+                sync = o.optJSONObject("sync")?.let { syncStatusFromJson(it) },
             )
         }
     }
@@ -197,4 +201,61 @@ private fun treatmentTimeMs(t: JSONObject): Long? {
         .recoverCatching { OffsetDateTime.parse(created).toInstant().toEpochMilli() }
         .recoverCatching { OffsetDateTime.parse(created, SPACE_OFFSET_FORMAT).toInstant().toEpochMilli() }
         .getOrNull()
+}
+
+/** Data freshness published by leveling-up's sync (see sync_status.py). */
+data class SyncStatus(
+    val checkedMs: Long,
+    /** Last successful Tandem -> Nightscout sync. */
+    val syncedMs: Long?,
+    /** Last pump -> Tandem cloud upload. */
+    val pumpUploadedMs: Long?,
+    /** Newest pump event in Tandem. */
+    val newestEventMs: Long?,
+    val uploadClient: String?,
+    val error: String?,
+)
+
+private fun SyncStatus.toJson(): JSONObject = JSONObject().apply {
+    put("checkedMs", checkedMs)
+    syncedMs?.let { put("syncedMs", it) }
+    pumpUploadedMs?.let { put("pumpUploadedMs", it) }
+    newestEventMs?.let { put("newestEventMs", it) }
+    uploadClient?.let { put("uploadClient", it) }
+    error?.let { put("error", it) }
+}
+
+private fun syncStatusFromJson(o: JSONObject) = SyncStatus(
+    checkedMs = o.getLong("checkedMs"),
+    syncedMs = if (o.has("syncedMs")) o.getLong("syncedMs") else null,
+    pumpUploadedMs = if (o.has("pumpUploadedMs")) o.getLong("pumpUploadedMs") else null,
+    newestEventMs = if (o.has("newestEventMs")) o.getLong("newestEventMs") else null,
+    uploadClient = if (o.has("uploadClient")) o.getString("uploadClient") else null,
+    error = if (o.has("error")) o.getString("error") else null,
+)
+
+/** Epoch ms of a zoned ISO-8601 string, or null. */
+private fun isoMs(value: Any?): Long? =
+    (value as? String)?.let { runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull() }
+
+/** The newest leveling-up freshness record in a devicestatus array, or null. */
+fun parseSyncStatus(json: String): SyncStatus? {
+    val arr = JSONArray(json)
+    var best: Pair<Long, JSONObject>? = null
+    for (i in 0 until arr.length()) {
+        val record = arr.optJSONObject(i) ?: continue
+        val tandem = record.optJSONObject("levelingUp")?.optJSONObject("tandem") ?: continue
+        val ms = isoMs(record.opt("created_at")) ?: continue
+        if (best == null || ms > best.first) best = ms to tandem
+    }
+    val (createdMs, t) = best ?: return null
+    fun str(key: String) = if (t.isNull(key)) null else t.optString(key).ifEmpty { null }
+    return SyncStatus(
+        checkedMs = isoMs(t.opt("checkedAt")) ?: createdMs,
+        syncedMs = isoMs(t.opt("syncedAt")),
+        pumpUploadedMs = isoMs(t.opt("pumpUploadedAt")),
+        newestEventMs = isoMs(t.opt("newestEventAt")),
+        uploadClient = str("uploadClient"),
+        error = str("error"),
+    )
 }

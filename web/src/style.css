@@ -152,6 +152,9 @@ input {
 .boluses .line1 { font-weight: 600; font-variant-numeric: tabular-nums; }
 .boluses .line2 { grid-column: 3; font-size: 0.85rem; color: var(--text-secondary); }
 
+.freshness { color: var(--text-muted); }
+.freshness.stale { color: var(--danger); font-weight: 600; }
+
 /* Sections */
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .section-head h2 { margin: 0; }

@@ -2,8 +2,8 @@
 // textContent.
 
 import {
-  arrow, formatAge, formatBolus, formatBolusDetail, formatClock, formatDelta, formatDuration,
-  formatIob, formatRate, isStale,
+  ago, arrow, formatAge, formatBolus, formatBolusDetail, formatClock, formatDelta, formatDuration,
+  formatIob, formatRate, formatSyncStatus, isStale,
 } from './format';
 import { renderGraph, TARGET_HIGH, TARGET_LOW } from './graph';
 import { BOLUS_WINDOW_MINUTES, type Bolus } from './model';
@@ -199,9 +199,18 @@ export class App {
     card.append(boluses.length
       ? this.bolusList(boluses)
       : h('p', { class: 'muted small' }, 'No boluses in last 2h'));
-    card.append(h('p', { class: 'muted small' },
-      data.pumpDataMs ? `Pump data ${formatAge(data.pumpDataMs, now)} old` : 'No pump data'));
+    card.append(this.freshnessLine(data));
     return card;
+  }
+
+  /** Pump -> Tandem and Tandem -> Nightscout freshness; mirrors the widget footer. */
+  private freshnessLine(data: Data): HTMLElement {
+    if (!data.sync) {
+      return h('p', { class: 'muted small' },
+        data.pumpDataMs ? `Pump data ${formatAge(data.pumpDataMs, data.fetchedMs)} old` : 'No pump data');
+    }
+    const { text, stale } = formatSyncStatus(data.sync, data.fetchedMs);
+    return h('p', { class: `small freshness${stale ? ' stale' : ''}` }, stale ? `⚠ ${text}` : text);
   }
 
   private bolusList(boluses: Bolus[]): HTMLElement {
@@ -275,7 +284,7 @@ export class App {
         ? ` (profile ${formatRate(state.profileRate)})`
         : state.profileRate !== null ? ' (profile rate)' : '';
       rows.push(h('p', {}, h('strong', {}, formatRate(state.basal.rate)), vs),
-        h('p', { class: 'muted small' }, `As of ${formatClock(state.basal.startMs)}, ${formatAge(state.basal.startMs, now)} ago`));
+        h('p', { class: 'muted small' }, `As of ${formatClock(state.basal.startMs)}, ${ago(state.basal.startMs, now)}`));
     } else {
       rows.push(h('p', { class: 'muted' }, 'No basal data.'));
     }
@@ -291,6 +300,18 @@ export class App {
         ...state.suspensions.map((s) => h('li', {},
           `${formatClock(s.startMs)} · ${s.reason || 'suspended'}`,
           s.resumedMs ? ` · resumed after ${formatDuration((s.resumedMs - s.startMs) / 60_000)}` : ' · not resumed yet'))));
+    }
+    if (data.sync) {
+      const s = data.sync;
+      rows.push(h('h3', {}, 'Data freshness'), h('ul', { class: 'plain' },
+        h('li', {}, 'Pump → Tandem cloud: ',
+          s.pumpUploadedMs ? `${formatClock(s.pumpUploadedMs)} (${ago(s.pumpUploadedMs, now)})` : 'unknown',
+          s.uploadClient ? ` via ${s.uploadClient}` : ''),
+        h('li', {}, 'Newest pump event: ',
+          s.newestEventMs ? formatClock(s.newestEventMs) : 'unknown'),
+        h('li', {}, 'Tandem → Nightscout: ',
+          s.syncedMs ? `${formatClock(s.syncedMs)} (${ago(s.syncedMs, now)})` : 'never',
+          s.error ? ` · last attempt failed: ${s.error}` : '')));
     }
     return h('section', { class: 'card' }, h('h2', {}, 'Basal & Control-IQ'), ...rows);
   }

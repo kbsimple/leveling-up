@@ -257,3 +257,44 @@ export function parsePumpState(
     suspensions,
   };
 }
+
+/** Data freshness published by leveling-up's sync (see sync_status.py). */
+export interface SyncStatus {
+  checkedMs: number;
+  /** Last successful Tandem -> Nightscout sync. */
+  syncedMs: number | null;
+  /** Last pump -> Tandem cloud upload. */
+  pumpUploadedMs: number | null;
+  /** Newest pump event in Tandem. */
+  newestEventMs: number | null;
+  uploadClient: string | null;
+  error: string | null;
+}
+
+function isoMs(value: unknown): number | null {
+  if (typeof value !== 'string' || !HAS_ZONE.test(value)) return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** The newest leveling-up freshness record among devicestatus records, or null. */
+export function parseSyncStatus(records: unknown): SyncStatus | null {
+  if (!Array.isArray(records)) return null;
+  let best: { ms: number; tandem: Record<string, unknown> } | null = null;
+  for (const r of records as Record<string, unknown>[]) {
+    const tandem = (r?.levelingUp as { tandem?: Record<string, unknown> } | undefined)?.tandem;
+    const ms = isoMs(r?.created_at);
+    if (!tandem || ms === null) continue;
+    if (!best || ms > best.ms) best = { ms, tandem };
+  }
+  if (!best) return null;
+  const t = best.tandem;
+  return {
+    checkedMs: isoMs(t.checkedAt) ?? best.ms,
+    syncedMs: isoMs(t.syncedAt),
+    pumpUploadedMs: isoMs(t.pumpUploadedAt),
+    newestEventMs: isoMs(t.newestEventAt),
+    uploadClient: typeof t.uploadClient === 'string' ? t.uploadClient : null,
+    error: typeof t.error === 'string' && t.error ? t.error : null,
+  };
+}

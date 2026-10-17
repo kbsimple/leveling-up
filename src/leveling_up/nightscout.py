@@ -40,6 +40,21 @@ class NightscoutClient:
     def delete_profile(self, profile_id: str) -> None:
         self._request("DELETE", f"api/v1/profile/{profile_id}")
 
+    def post_devicestatus(self, status: dict) -> None:
+        self._request("POST", "api/v1/devicestatus", json=status)
+
+    def prune_devicestatus(self, device: str, keep: int) -> int:
+        """Deletes all but the newest `keep` devicestatus records from `device`.
+
+        Returns the number deleted.
+        """
+        records = self._request(
+            "GET", "api/v1/devicestatus.json", params={"count": keep + 100, "find[device]": device})
+        stale = [r for r in records if r.get("device") == device][keep:]
+        for record in stale:
+            self._request("DELETE", f"api/v1/devicestatus/{record['_id']}")
+        return len(stale)
+
 
 def prune_profile_doc(doc: dict, insulin_duration_hours: float) -> dict:
     """Returns a copy of a profile document keeping only its default profile.

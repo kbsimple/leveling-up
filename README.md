@@ -54,9 +54,14 @@ npm test           # vitest
 npm run typecheck
 ```
 
-**Shared wording:** `fixtures/bolus-cases.json` holds sample treatments and the
-exact bolus text expected. Both the widget's Kotlin tests and the web tests run
-it, so the two can't drift apart.
+**Data freshness:** the widget footer and the site show when the pump last
+uploaded to Tandem and when Tandem data last reached Nightscout ("Pump upload
+40m ago · synced just now"), highlighted when either is late. The sync service
+publishes these as a Nightscout devicestatus record (`device: leveling-up`).
+
+**Shared wording:** `fixtures/bolus-cases.json` and `fixtures/sync-status-cases.json`
+hold sample data and the exact text expected. Both the widget's Kotlin tests and the web tests run
+them, so the two can't drift apart.
 
 ## Setup
 

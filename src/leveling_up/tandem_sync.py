@@ -4,14 +4,16 @@ tconnectsync reads its settings from environment variables at import time, so
 `configure_tconnectsync_env` must run before this module's lazy imports.
 """
 
+import datetime
 import logging
 import os
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import arrow
 
-from leveling_up import bolus_details
+from leveling_up import bolus_details, sync_status
 from leveling_up.config import Config
+from leveling_up.nightscout import NightscoutClient
 
 logger = logging.getLogger(__name__)
 
@@ -81,20 +83,58 @@ class TandemSync:
         self._tconnect = TConnectApi(config.tconnect_email, config.tconnect_password,
                                      config.tconnect_region)
         self._nightscout = NightscoutApi(config.ns_url, config.ns_secret)
+        self._status_client = NightscoutClient(config.ns_url, config.ns_secret)
         self._choose_device = lambda: ChooseDevice(secret, self._tconnect).choose()
         self._device = None
+        # Freshness state published after every run (see sync_status.py).
+        self._synced_at: Optional[datetime.datetime] = None
+        self._pump_uploaded_at: Optional[datetime.datetime] = None
+        self._newest_event_at: Optional[datetime.datetime] = None
+        self._upload_client: Optional[str] = None
 
     def run(self) -> str:
-        """Runs one sync pass and returns a short summary."""
-        if self._device is None:
-            self._device = self._choose_device()
+        """Runs one sync pass, publishes freshness, and returns a short summary."""
         # Must be timezone-aware: tconnectsync's own CLI passes a naive local
         # time, which arrow treats as UTC and yields negative basal durations.
         time_end = arrow.now(self._tz)
-        time_start = time_end.shift(hours=-self._lookback_hours)
-        added, last_event_id = self._process_cls(
-            self._tconnect, self._nightscout, self._device, pretend=False,
-            secret=self._secret, features=list(FEATURES)).process(time_start, time_end)
+        error = None
+        try:
+            if self._device is None:
+                self._device = self._choose_device()
+            # Read pump upload times before processing so they never claim
+            # data newer than what this run pulled.
+            self._refresh_pump_times()
+            time_start = time_end.shift(hours=-self._lookback_hours)
+            added, last_event_id = self._process_cls(
+                self._tconnect, self._nightscout, self._device, pretend=False,
+                secret=self._secret, features=list(FEATURES)).process(time_start, time_end)
+            self._synced_at = time_end.datetime
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}"
+            raise
+        finally:
+            self._publish_status(time_end.datetime, error)
         summary = f"uploaded {added}, last event {last_event_id}"
         logger.info("tandem: %s", summary)
         return summary
+
+    def _refresh_pump_times(self) -> None:
+        # ChooseDevice returns the pump record itself; match on its id.
+        device_id = (self._device.get("assignmentId") if isinstance(self._device, dict)
+                     else self._device)
+        pumps = self._tconnect.tandemsource.get_pumper().get("pumps", [])
+        pump = next((p for p in pumps if p.get("assignmentId") == device_id), None)
+        if pump is None:
+            return
+        self._pump_uploaded_at, self._newest_event_at = sync_status.parse_pump_times(pump, self._tz)
+        self._upload_client = pump.get("lastUploadClientType")
+
+    def _publish_status(self, checked_at: datetime.datetime, error: Optional[str]) -> None:
+        status = sync_status.build_status(checked_at, self._synced_at, self._pump_uploaded_at,
+                                          self._newest_event_at, self._upload_client, error)
+        try:
+            self._status_client.post_devicestatus(status)
+            self._status_client.prune_devicestatus(sync_status.DEVICE, sync_status.KEEP_RECORDS)
+        except Exception:  # pylint: disable=broad-except
+            # Freshness is informational; never fail the sync over it.
+            logger.warning("could not publish sync status", exc_info=True)

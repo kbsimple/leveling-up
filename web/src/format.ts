@@ -1,7 +1,7 @@
 // Display formatting. The bolus wording mirrors the Android widget's Format.kt;
 // both are checked against fixtures/bolus-cases.json.
 
-import type { Bolus, Glucose } from './model';
+import type { Bolus, Glucose, SyncStatus } from './model';
 
 /** Glucose older than this is shown as stale. */
 export const STALE_GLUCOSE_MINUTES = 12;
@@ -109,4 +109,34 @@ export function formatClock(timeMs: number): string {
 /** "0.4 U/hr", "0.275 U/hr": up to three decimals, no trailing zeros. */
 export function formatRate(rate: number): string {
   return `${parseFloat(rate.toFixed(3))} U/hr`;
+}
+
+/** Pump uploads to Tandem roughly hourly; later than this is a warning. */
+export const STALE_PUMP_UPLOAD_MINUTES = 75;
+/** The service syncs Tandem every 15 minutes; later than this is a warning. */
+export const STALE_SYNC_MINUTES = 35;
+
+/** "just now", "7m ago", "2h 5m ago". */
+export function ago(thenMs: number, nowMs: number): string {
+  const age = formatAge(thenMs, nowMs);
+  return age === 'now' ? 'just now' : `${age} ago`;
+}
+
+/**
+ * One freshness line, e.g. "Pump upload 40m ago · synced 2m ago", and whether
+ * it should be shown as a warning. Checked against fixtures/sync-status-cases.json.
+ */
+export function formatSyncStatus(status: SyncStatus, nowMs: number): { text: string; stale: boolean } {
+  const pump = status.pumpUploadedMs === null ? 'Pump upload unknown' : `Pump upload ${ago(status.pumpUploadedMs, nowMs)}`;
+  let sync: string;
+  if (status.error) {
+    sync = status.syncedMs === null ? 'sync failing, never ok' : `sync failing, last ok ${ago(status.syncedMs, nowMs)}`;
+  } else {
+    sync = status.syncedMs === null ? 'not synced yet' : `synced ${ago(status.syncedMs, nowMs)}`;
+  }
+  const older = (ms: number | null, minutes: number) => ms === null || nowMs - ms > minutes * 60_000;
+  const stale = status.error !== null
+    || older(status.pumpUploadedMs, STALE_PUMP_UPLOAD_MINUTES)
+    || older(status.syncedMs, STALE_SYNC_MINUTES);
+  return { text: `${pump} · ${sync}`, stale };
 }

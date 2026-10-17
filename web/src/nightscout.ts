@@ -2,8 +2,8 @@
 // never needs the API secret.
 
 import {
-  latestTreatmentMs, parseBoluses, parseEntries, parsePebble, parsePumpState,
-  type Bolus, type Glucose, type ProfileDoc, type PumpState, type Reading, type Treatment,
+  latestTreatmentMs, parseBoluses, parseEntries, parsePebble, parsePumpState, parseSyncStatus,
+  type Bolus, type Glucose, type ProfileDoc, type PumpState, type Reading, type SyncStatus, type Treatment,
 } from './model';
 import type { Settings } from './storage';
 
@@ -19,6 +19,8 @@ export interface Data {
   treatments: Treatment[];
   profile: ProfileDoc | null;
   pumpDataMs: number | null;
+  /** Freshness published by leveling-up's sync; null if none. */
+  sync: SyncStatus | null;
 }
 
 async function get(settings: Settings, path: string, params: Record<string, string> = {}): Promise<unknown> {
@@ -37,13 +39,14 @@ async function get(settings: Settings, path: string, params: Record<string, stri
 
 export async function fetchData(settings: Settings, nowMs = Date.now()): Promise<Data> {
   const since = nowMs - MAX_WINDOW_HOURS * 3_600_000;
-  const [pebble, entries, treatments, profiles] = await Promise.all([
+  const [pebble, entries, treatments, profiles, devicestatus] = await Promise.all([
     get(settings, 'pebble'),
     get(settings, 'api/v1/entries/sgv.json', { 'find[date][$gte]': String(since), count: '400' }),
     get(settings, 'api/v1/treatments.json', {
       'find[created_at][$gte]': new Date(since).toISOString(), count: '1500',
     }),
     get(settings, 'api/v1/profile.json', { count: '1' }),
+    get(settings, 'api/v1/devicestatus.json', { 'find[device]': 'leveling-up', count: '1' }),
   ]);
   const list = Array.isArray(treatments) ? (treatments as Treatment[]) : [];
   return {
@@ -53,6 +56,7 @@ export async function fetchData(settings: Settings, nowMs = Date.now()): Promise
     treatments: list,
     profile: Array.isArray(profiles) && profiles.length ? (profiles[0] as ProfileDoc) : null,
     pumpDataMs: latestTreatmentMs(list, 'Temp Basal'),
+    sync: parseSyncStatus(devicestatus),
   };
 }
 

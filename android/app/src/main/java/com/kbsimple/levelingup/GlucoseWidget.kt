@@ -120,10 +120,14 @@ private fun WidgetContent(snapshot: Snapshot?, nowMs: Long) {
         }
 
         Spacer(GlanceModifier.height(6.dp))
-        val footer = snapshot.error
-            ?: snapshot.pumpDataMs?.let { "Pump data ${formatAge(it, nowMs)} old" }
-            ?: "No pump data"
-        Text(footer, style = small.copy(color = if (snapshot.error != null) GlanceTheme.colors.error else secondary))
+        val syncLine = snapshot.sync?.let { formatSyncStatus(it, nowMs) }
+        val (footer, warn) = when {
+            snapshot.error != null -> snapshot.error to true
+            syncLine != null -> (if (syncLine.stale) "⚠ ${syncLine.text}" else syncLine.text) to syncLine.stale
+            snapshot.pumpDataMs != null -> "Pump data ${formatAge(snapshot.pumpDataMs, nowMs)} old" to false
+            else -> "No pump data" to false
+        }
+        Text(footer, style = small.copy(color = if (warn) GlanceTheme.colors.error else secondary), maxLines = 2)
     }
 }
 

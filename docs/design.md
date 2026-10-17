@@ -140,6 +140,24 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
   checks, Runtime, Features, Dependencies); `/statusz.json` carries the build
   identity.
 
+## Data freshness (2026-10-17)
+
+Tandem data can lag up to ~60 minutes, so two times are published and shown:
+
+1. **Pump → Tandem cloud:** Tandem Source's `lastUploadDate` (and
+   `maxDateOfEvents`, the newest pump event) from the pumper endpoint.
+   tconnectsync reads but doesn't store these.
+2. **Tandem → Nightscout:** when the service last synced successfully.
+
+After every Tandem run (success or failure) the service posts a Nightscout
+devicestatus record (`device: leveling-up`, fields under `levelingUp.tandem`;
+see `src/leveling_up/sync_status.py`) and keeps only the newest 12. Read-only
+tokens can read it. The widget footer and the site show one line, e.g.
+"Pump upload 40m ago · synced just now", marked as a warning when the pump
+upload is over 75 minutes old, the last sync over 35 minutes old, or the sync is
+failing. `fixtures/sync-status-cases.json` keeps the widget and site identical.
+The site's basal section and `/statusz/` show the individual times.
+
 ## Open questions
 
 - **Widget app:** reuse an existing Nightscout client (leading candidate:

@@ -3,6 +3,8 @@
 
 import './style.css';
 import { BUILD } from './buildinfo';
+import { ago, formatSyncStatus } from './format';
+import { parseSyncStatus } from './model';
 import { loadSettings, type Settings } from './storage';
 
 interface Check {
@@ -28,6 +30,28 @@ async function timed(url: string): Promise<{ resp: Response; ms: number }> {
 }
 
 /** Reachability and Nightscout version, then whether the token can read. */
+/** Freshness rows from leveling-up's devicestatus record. */
+async function freshnessRows(settings: Settings): Promise<[string, string | Check][]> {
+  try {
+    const url = `${settings.url}/api/v1/devicestatus.json?find%5Bdevice%5D=leveling-up&count=1&token=${encodeURIComponent(settings.token)}`;
+    const status = parseSyncStatus(await (await fetch(url, { cache: 'no-store' })).json());
+    if (!status) return [['tandem freshness', { ok: false, detail: 'No record (is the sync service running?)' }]];
+    const now = Date.now();
+    const line = formatSyncStatus(status, now);
+    const at = (ms: number | null) => (ms === null ? 'unknown' : `${new Date(ms).toLocaleString()} (${ago(ms, now)})`);
+    return [
+      ['tandem freshness', { ok: !line.stale, detail: line.text }],
+      ['pump → tandem', at(status.pumpUploadedMs)],
+      ['newest pump event', at(status.newestEventMs)],
+      ['tandem → nightscout', at(status.syncedMs)],
+      ['last sync attempt', at(status.checkedMs)],
+      ...(status.error ? [['sync error', { ok: false, detail: status.error }] as [string, Check]] : []),
+    ];
+  } catch {
+    return [['tandem freshness', { ok: false, detail: 'Check failed' }]];
+  }
+}
+
 async function nightscoutChecks(settings: Settings): Promise<{ reach: Check; auth: Check }> {
   const base = settings.url;
   const token = encodeURIComponent(settings.token);
@@ -126,9 +150,9 @@ async function render(root: HTMLElement): Promise<void> {
   root.replaceChildren(header, sub, build, nightscout, runtime, features, deps, back);
 
   if (settings) {
-    const { reach, auth } = await nightscoutChecks(settings);
+    const [{ reach, auth }, freshness] = await Promise.all([nightscoutChecks(settings), freshnessRows(settings)]);
     const updated = section('Nightscout', [
-      ['site', new URL(settings.url).host], ['reachability', reach], ['token', auth],
+      ['site', new URL(settings.url).host], ['reachability', reach], ['token', auth], ...freshness,
     ]);
     nightscout.replaceWith(updated);
     nightscout = updated;

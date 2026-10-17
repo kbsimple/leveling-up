@@ -46,7 +46,10 @@ class NightscoutReader(private val settings: Settings) {
                 "find[enteredBy]" to PUMP_ENTERED_BY,
             )),
         )
-        return Snapshot(glucose, boluses, pumpDataMs, nowMs)
+        val sync = parseSyncStatus(
+            get("api/v1/devicestatus.json", mapOf("count" to "1", "find[device]" to "leveling-up")),
+        )
+        return Snapshot(glucose, boluses, pumpDataMs, nowMs, sync = sync)
     }
 
     private fun get(path: String, params: Map<String, String>): String {

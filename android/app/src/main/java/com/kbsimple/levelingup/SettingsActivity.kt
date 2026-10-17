@@ -99,7 +99,8 @@ class SettingsActivity : Activity() {
             lines += "Glucose ${it.mgdl} ${arrow(it.direction)} (${formatAge(it.timeMs, now)} old), ${formatIob(it.iob)}"
         }
         lines += "Boluses in last 2h: ${snapshot.boluses.size}"
-        snapshot.pumpDataMs?.let { lines += "Pump data ${formatAge(it, now)} old" }
+        snapshot.sync?.let { lines += formatSyncStatus(it, now).text }
+            ?: snapshot.pumpDataMs?.let { lines += "Pump data ${formatAge(it, now)} old" }
         lines += "Checked ${formatClock(snapshot.fetchedMs)}"
         status.text = lines.joinToString("\n")
     }

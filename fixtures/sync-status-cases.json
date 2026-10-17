@@ -1,0 +1,77 @@
+{
+  "description": "Shared data-freshness cases. Both the Android widget and the web app read the newest devicestatus record with levelingUp.tandem (see src/leveling_up/sync_status.py) and format it as one line. `expected` null means no record, so the caller falls back to the newest pump treatment. `stale` marks the line for warning color: pump upload older than 75 minutes, last sync older than 35 minutes, or a failing sync.",
+  "cases": [
+    {
+      "name": "fresh",
+      "now": "2026-10-17T19:47:00Z",
+      "devicestatus": [
+        {"device": "leveling-up", "created_at": "2026-10-17T19:46:36.000Z", "levelingUp": {"tandem": {
+          "checkedAt": "2026-10-17T12:46:36-07:00", "syncedAt": "2026-10-17T12:46:36-07:00",
+          "pumpUploadedAt": "2026-10-17T19:06:48+00:00", "newestEventAt": "2026-10-17T12:06:31-07:00",
+          "uploadClient": "mobile_mobi"}}}
+      ],
+      "expected": {"text": "Pump upload 40m ago · synced just now", "stale": false}
+    },
+    {
+      "name": "pump has not uploaded for over 75 minutes",
+      "now": "2026-10-17T20:30:00Z",
+      "devicestatus": [
+        {"device": "leveling-up", "created_at": "2026-10-17T20:25:00.000Z", "levelingUp": {"tandem": {
+          "checkedAt": "2026-10-17T20:25:00+00:00", "syncedAt": "2026-10-17T20:25:00+00:00",
+          "pumpUploadedAt": "2026-10-17T19:06:48+00:00", "newestEventAt": null, "uploadClient": null}}}
+      ],
+      "expected": {"text": "Pump upload 1h 23m ago · synced 5m ago", "stale": true}
+    },
+    {
+      "name": "service stopped syncing",
+      "now": "2026-10-17T20:30:00Z",
+      "devicestatus": [
+        {"device": "leveling-up", "created_at": "2026-10-17T19:50:00.000Z", "levelingUp": {"tandem": {
+          "checkedAt": "2026-10-17T19:50:00+00:00", "syncedAt": "2026-10-17T19:50:00+00:00",
+          "pumpUploadedAt": "2026-10-17T20:00:00+00:00", "newestEventAt": null, "uploadClient": null}}}
+      ],
+      "expected": {"text": "Pump upload 30m ago · synced 40m ago", "stale": true}
+    },
+    {
+      "name": "sync failing, last success shown",
+      "now": "2026-10-17T20:30:00Z",
+      "devicestatus": [
+        {"device": "leveling-up", "created_at": "2026-10-17T20:28:00.000Z", "levelingUp": {"tandem": {
+          "checkedAt": "2026-10-17T20:28:00+00:00", "syncedAt": "2026-10-17T20:10:00+00:00",
+          "pumpUploadedAt": "2026-10-17T20:00:00+00:00", "newestEventAt": null, "uploadClient": null,
+          "error": "ApiException: 401"}}}
+      ],
+      "expected": {"text": "Pump upload 30m ago · sync failing, last ok 20m ago", "stale": true}
+    },
+    {
+      "name": "never synced, pump upload unknown",
+      "now": "2026-10-17T20:30:00Z",
+      "devicestatus": [
+        {"device": "leveling-up", "created_at": "2026-10-17T20:28:00.000Z", "levelingUp": {"tandem": {
+          "checkedAt": "2026-10-17T20:28:00+00:00", "syncedAt": null,
+          "pumpUploadedAt": null, "newestEventAt": null, "uploadClient": null, "error": "LoginError"}}}
+      ],
+      "expected": {"text": "Pump upload unknown · sync failing, never ok", "stale": true}
+    },
+    {
+      "name": "newest leveling-up record wins; other uploaders ignored",
+      "now": "2026-10-17T19:47:00Z",
+      "devicestatus": [
+        {"device": "openaps://phone", "created_at": "2026-10-17T19:46:59.000Z", "openaps": {}},
+        {"device": "leveling-up", "created_at": "2026-10-17T19:45:00.000Z", "levelingUp": {"tandem": {
+          "checkedAt": "2026-10-17T19:45:00+00:00", "syncedAt": "2026-10-17T19:45:00+00:00",
+          "pumpUploadedAt": "2026-10-17T19:30:00+00:00", "newestEventAt": null, "uploadClient": null}}},
+        {"device": "leveling-up", "created_at": "2026-10-17T19:30:00.000Z", "levelingUp": {"tandem": {
+          "checkedAt": "2026-10-17T19:30:00+00:00", "syncedAt": "2026-10-17T19:30:00+00:00",
+          "pumpUploadedAt": "2026-10-17T18:30:00+00:00", "newestEventAt": null, "uploadClient": null}}}
+      ],
+      "expected": {"text": "Pump upload 17m ago · synced 2m ago", "stale": false}
+    },
+    {
+      "name": "no leveling-up record",
+      "now": "2026-10-17T19:47:00Z",
+      "devicestatus": [{"device": "openaps://phone", "created_at": "2026-10-17T19:46:59.000Z"}],
+      "expected": null
+    }
+  ]
+}
