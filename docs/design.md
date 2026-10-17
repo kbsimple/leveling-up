@@ -45,6 +45,25 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
 - **Latency:** newest event was ~40 min old (real time). Tandem data arrives in
   batches when the pump syncs, so dosing info lags CGM by tens of minutes.
 
+### Nightscout sync spike (2026-10-17)
+- Target: the user's existing Nightscout Pro instance (v15.0.8, mg/dL). It was
+  empty, with no Dexcom bridge enabled. It briefly returned Nightscout Pro's
+  "503 Reloading" page during a rebuild.
+- **Tandem -> NS:** stock `tconnectsync --features BOLUS IOB BASAL` with
+  `TIMEZONE_NAME=America/Los_Angeles` (fixes the -04:00 timestamp issue).
+  A 1-day sync uploaded 21 boluses (`Combo Bolus`, with carbs and BG), 420
+  `Temp Basal` and 1 `Basal Suspension` treatments. It took ~2 min, mostly the
+  basal uploads. `PROFILES` was left out to avoid overwriting NS profiles.
+  The IOB feature produced no devicestatus in tconnectsync 3.0.3.
+- **Dexcom -> NS:** `spikes/dexcom_to_nightscout.py` (pydexcom) posts `sgv`
+  entries tagged `device=leveling-up (dexcom-share)` and only uploads readings
+  newer than its last one, so reruns are no-ops.
+- **Result:** NS `/pebble` (the endpoint widget apps commonly read) returns
+  glucose, direction, delta, IOB and COB. IOB/COB are computed by Nightscout
+  from the uploaded treatments, not reported by the pump. With no NS profile,
+  these use defaults and may differ from the pump's IOB.
+- Not yet scheduled: both syncs were run once by hand.
+
 ### Implications
 - Dexcom is the real-time source for glucose; Tandem is the (delayed) source
   for insulin delivery. The widget should show glucose immediately and
