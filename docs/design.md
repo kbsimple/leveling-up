@@ -67,7 +67,6 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
   in place: added the pump's active profile (`frog`, 16 basal segments,
   DIA 3.0) and made it the default. Older profile entries remain in the
   store. Include PROFILES in the regular sync so NS tracks pump changes.
-- Not yet scheduled: both syncs were run once by hand.
 
 ### Implications
 - Dexcom is the real-time source for glucose; Tandem is the (delayed) source
@@ -97,6 +96,26 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
 - **Stack:** Python backend using pydexcom and tconnectsync (newer than system 3.9).
 - **Later platforms (not immediate):** Wear OS, Chrome extension.
 
+## Sync service (2026-10-17)
+
+- Python package `leveling_up` (`src/`), run as `leveling-up run`: a scheduler
+  (Dexcom every 5 min, Tandem every 15 min) plus a small control API.
+- **Boost mode:** `leveling-up boost` polls Tandem every 5 min for 30 min,
+  starting immediately; `--minutes N` and `--cancel` supported.
+- **Tandem:** calls tconnectsync's `ProcessTimeRange` directly with a
+  timezone-aware window. tconnectsync's own CLI passes a naive `now`, which
+  arrow reads as UTC, giving the in-progress basal a negative duration.
+  Features: BASAL, BOLUS, PUMP_EVENTS, PROFILES (profile upload in replace mode).
+- **IOB:** the pump reports IOB only inside bolus events, so it goes stale
+  between boluses and uploads. We use Nightscout's estimate, computed from the
+  uploaded boluses and the profile.
+- **DIA:** Control-IQ always uses 5 hours, but the pump profile says 3, so the
+  service overrides DIA (`INSULIN_DURATION_HOURS`) when converting pump
+  profiles, which keeps tconnectsync's profile comparison stable.
+- Old Nightscout profiles were deleted (`cleanup-profiles`); only `frog` remains.
+- **Deployment:** one Docker Compose setup for both the on-prem Ubuntu server
+  and Vultr; see the `deploy-sync` skill. Only one instance may run at a time.
+
 ## Open questions
 
 - **Widget app:** reuse an existing Nightscout client (leading candidate:
@@ -106,8 +125,6 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
   or serve a small Nightscout-compatible API ourselves?
 - **Upload nudging:** confirm whether repeated Tandem requests trigger a pump
   upload, and at what request rate it is safe and useful.
-- **IOB:** use the pump's reported IOB (stale between uploads) or compute a
-  decayed estimate from recent boluses?
 
 ## Next steps
 

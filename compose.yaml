@@ -1,0 +1,25 @@
+# Same file on the on-prem Ubuntu server and on Vultr.
+services:
+  sync:
+    build: .
+    image: leveling-up:latest
+    env_file: .env
+    environment:
+      # The container must listen on all interfaces for the port mapping;
+      # CONTROL_TOKEN (required by config in that case) protects the API.
+      CONTROL_HOST: 0.0.0.0
+      CONTROL_PORT: "8787"
+    ports:
+      # Host-local only. Expose deliberately (e.g. behind a reverse proxy) later.
+      - "127.0.0.1:${HOST_CONTROL_PORT:-8787}:8787"
+    volumes:
+      - data:/data
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  data:
