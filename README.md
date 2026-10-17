@@ -30,6 +30,34 @@ GitHub Actions, then builds a signed APK and publishes it as release
 `widget-<run number>`. The signing key lives in repo secrets
 `WIDGET_KEYSTORE_B64` and `WIDGET_KEYSTORE_PASSWORD`.
 
+## Web companion
+
+https://kbsimple.github.io/leveling-up/ is a mobile-friendly page with the
+same view as the widget, plus a glucose graph with bolus markers, a 2/6/24h
+bolus history, and basal/Control-IQ status. It works on any phone, including
+iPhone (Share → Add to Home Screen).
+
+- Enter the Nightscout URL and a **read-only** token; they're kept in that
+  browser's storage (Settings → Forget removes them). The page talks to
+  Nightscout directly; nothing passes through a server of ours.
+- Refreshes every 60 seconds and when you return to the tab.
+- `/statusz/` shows build identity and live checks (Nightscout reachability,
+  token is read-only, browser storage); `/statusz.json` has the build identity.
+
+Source is in `web/` (TypeScript + Vite). Every push to `main` touching `web/`
+or `fixtures/` runs type checks and tests, then deploys to GitHub Pages.
+
+```
+cd web && npm install
+npm run dev        # local dev server
+npm test           # vitest
+npm run typecheck
+```
+
+**Shared wording:** `fixtures/bolus-cases.json` holds sample treatments and the
+exact bolus text expected. Both the widget's Kotlin tests and the web tests run
+it, so the two can't drift apart.
+
 ## Setup
 
 Requires Python 3.12+.

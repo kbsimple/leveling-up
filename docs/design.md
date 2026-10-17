@@ -124,6 +124,22 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
 - **Deployment:** one Docker Compose setup for both the on-prem Ubuntu server
   and Vultr; see the `deploy-sync` skill. Only one instance may run at a time.
 
+## Web companion (2026-10-17)
+
+- Static TypeScript/Vite site on GitHub Pages; the browser calls Nightscout
+  directly (Nightscout sends `Access-Control-Allow-Origin: *`). Credentials
+  (URL + read-only token) live in the viewer's browser storage only.
+- Widget-parity card on top, then glucose graph (3/6/12/24h, 70–180 band,
+  bolus markers: orange triangle = manual, aqua circle = automatic), bolus
+  history (2/6/24h) and basal/Control-IQ (rate vs profile, Sleep/Exercise,
+  suspensions).
+- `fixtures/bolus-cases.json` is the single source of truth for bolus wording;
+  Kotlin and TypeScript tests both run it. Both round units to tenths half-up
+  before formatting so Java and JavaScript agree.
+- `/statusz/` follows the kbsimple Service Status layout (Identity, live
+  checks, Runtime, Features, Dependencies); `/statusz.json` carries the build
+  identity.
+
 ## Open questions
 
 - **Widget app:** reuse an existing Nightscout client (leading candidate:

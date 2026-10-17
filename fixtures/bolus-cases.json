@@ -1,0 +1,133 @@
+{
+  "description": "Shared bolus parsing and wording cases. Both the Android widget (Kotlin) and the web app (TypeScript) tests run every case: parse `treatments` as of `now` with the default 120-minute window, then format each bolus (newest first) as line1/line2. line2 null means no detail line. Treatments are shaped as leveling-up's sync uploads them to Nightscout.",
+  "cases": [
+    {
+      "name": "automatic correction is one line",
+      "now": "2026-10-17T17:30:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T17:11:51.000Z", "insulin": 0.69, "carbs": null,
+         "automatic": true, "foodInsulin": 0, "correctionInsulin": 0.69, "suggestedInsulin": 0.69,
+         "requestedInsulin": 0.69, "bolusId": 16258}
+      ],
+      "expected": [{"line1": "0.7U · auto", "line2": null}]
+    },
+    {
+      "name": "carb plus correction with extended portion folded in",
+      "now": "2026-10-17T16:30:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T15:50:00.000Z", "insulin": 2.17, "carbs": null,
+         "extendedPortion": true, "bolusId": 16257},
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T15:05:00.000Z", "insulin": 2.63, "carbs": 65,
+         "automatic": false, "foodInsulin": 4.33, "correctionInsulin": 0.47, "suggestedInsulin": 4.8,
+         "requestedInsulin": 4.8, "extendedInsulin": 2.17, "extendedMinutes": 45, "bolusId": 16257}
+      ],
+      "expected": [{"line1": "4.8U · 65g", "line2": "4.3 carb + 0.5 corr · 2.2U over 45m"}]
+    },
+    {
+      "name": "carb only needs no detail",
+      "now": "2026-10-17T20:00:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T19:27:00.000Z", "insulin": 3.18, "carbs": 45,
+         "automatic": false, "foodInsulin": 3.18, "correctionInsulin": 0, "suggestedInsulin": 3.18,
+         "requestedInsulin": 3.18, "bolusId": 1}
+      ],
+      "expected": [{"line1": "3.2U · 45g", "line2": null}]
+    },
+    {
+      "name": "negative correction reduces the carb portion",
+      "now": "2026-10-17T20:00:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T19:00:00.000Z", "insulin": 1.5, "carbs": 30,
+         "automatic": false, "foodInsulin": 1.8, "correctionInsulin": -0.3, "suggestedInsulin": 1.5,
+         "requestedInsulin": 1.5, "bolusId": 2}
+      ],
+      "expected": [{"line1": "1.5U · 30g", "line2": "1.8 carb − 0.3 corr"}]
+    },
+    {
+      "name": "manual correction",
+      "now": "2026-10-17T07:00:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T06:21:00.000Z", "insulin": 0.72, "carbs": null,
+         "automatic": false, "foodInsulin": 0, "correctionInsulin": 0.72, "suggestedInsulin": 0.72,
+         "requestedInsulin": 0.72, "bolusId": 3}
+      ],
+      "expected": [{"line1": "0.7U", "line2": "correction"}]
+    },
+    {
+      "name": "amount lowered from suggestion",
+      "now": "2026-10-17T20:00:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T19:00:00.000Z", "insulin": 2.0, "carbs": 40,
+         "automatic": false, "foodInsulin": 2.35, "correctionInsulin": 0, "suggestedInsulin": 2.35,
+         "requestedInsulin": 2.0, "bolusId": 4}
+      ],
+      "expected": [{"line1": "2.0U · 40g", "line2": "edited −0.4 from 2.4"}]
+    },
+    {
+      "name": "correction raised from suggestion",
+      "now": "2026-10-17T20:00:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T19:00:00.000Z", "insulin": 3.0, "carbs": null,
+         "automatic": false, "foodInsulin": 0, "correctionInsulin": 2.5, "suggestedInsulin": 2.5,
+         "requestedInsulin": 3.0, "bolusId": 5}
+      ],
+      "expected": [{"line1": "3.0U", "line2": "correction · edited +0.5 from 2.5"}]
+    },
+    {
+      "name": "rounding noise is not an edit",
+      "now": "2026-10-17T20:00:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T19:00:00.000Z", "insulin": 0.63, "carbs": null,
+         "automatic": true, "foodInsulin": 0, "correctionInsulin": 0.63, "suggestedInsulin": 0.63000005,
+         "requestedInsulin": 0.63, "bolusId": 6}
+      ],
+      "expected": [{"line1": "0.6U · auto", "line2": null}]
+    },
+    {
+      "name": "declined correction",
+      "now": "2026-10-17T20:00:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T19:00:00.000Z", "insulin": 1.76, "carbs": 30,
+         "automatic": false, "foodInsulin": 1.76, "correctionInsulin": 0, "suggestedInsulin": 1.76,
+         "requestedInsulin": 1.76, "declinedCorrection": true, "bolusId": 7}
+      ],
+      "expected": [{"line1": "1.8U · 30g", "line2": "corr declined"}]
+    },
+    {
+      "name": "stopped early",
+      "now": "2026-10-17T22:30:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T22:06:00.000Z", "insulin": 0.795, "carbs": null,
+         "automatic": true, "foodInsulin": 0, "correctionInsulin": 1.4, "suggestedInsulin": 1.4,
+         "requestedInsulin": 1.4, "completion": "stopped by alarm", "bolusId": 8}
+      ],
+      "expected": [{"line1": "1.4U · auto", "line2": "0.8U delivered, stopped by alarm"}]
+    },
+    {
+      "name": "older treatment without calculator details",
+      "now": "2026-10-17T16:30:00Z",
+      "treatments": [
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T16:00:00.000Z", "insulin": 0.4,
+         "notes": "Automatic Bolus", "enteredBy": "Pump (tconnectsync)"}
+      ],
+      "expected": [{"line1": "0.4U · auto", "line2": null}]
+    },
+    {
+      "name": "carbs-only entry, other timestamp formats, newest first, window and non-doses",
+      "now": "2026-10-17T18:30:00Z",
+      "treatments": [
+        {"eventType": "Carb Correction", "created_at": "2026-10-17T18:20:00Z", "carbs": 15},
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17 11:00:00-07:00", "insulin": 1.0},
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T11:10:00-07:00", "insulin": 2.0},
+        {"eventType": "Temp Basal", "created_at": "2026-10-17T18:01:27.000Z", "absolute": 0.41, "insulin": null, "carbs": null},
+        {"eventType": "Combo Bolus", "created_at": "2026-10-17T16:00:00.000Z", "insulin": 9.0},
+        {"eventType": "Combo Bolus", "created_at": "garbage", "insulin": 4.0}
+      ],
+      "expected": [
+        {"line1": "15g", "line2": null},
+        {"line1": "2.0U", "line2": null},
+        {"line1": "1.0U", "line2": null}
+      ]
+    }
+  ]
+}

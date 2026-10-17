@@ -47,6 +47,13 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests.all {
+            // Shared with the web app's tests.
+            it.systemProperty("fixturesDir", rootProject.file("../fixtures").absolutePath)
+        }
+    }
 }
 
 kotlin {

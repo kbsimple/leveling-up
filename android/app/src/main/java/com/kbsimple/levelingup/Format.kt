@@ -45,7 +45,11 @@ fun formatClock(timeMs: Long, zone: ZoneId = ZoneId.systemDefault()): String =
 /** Differences below this many units are rounding, not a user edit. */
 private const val EDIT_THRESHOLD_UNITS = 0.05
 
-private fun u(units: Double) = String.format(Locale.US, "%.1f", units)
+/**
+ * Units to one decimal. Rounds to tenths first (half up) so the result matches
+ * the web app's formatting exactly; see fixtures/bolus-cases.json.
+ */
+private fun u(units: Double) = String.format(Locale.US, "%.1f", Math.round(units * 10) / 10.0)
 
 /** First line for a bolus: "4.8U · 65g", "0.7U · auto", "18g". */
 fun formatBolus(bolus: Bolus): String = listOfNotNull(
@@ -94,7 +98,7 @@ fun formatDuration(minutes: Int): String = when {
 }
 
 fun formatIob(iob: Double?): String =
-    if (iob == null) "IOB --" else String.format(Locale.US, "IOB %.1fU", iob)
+    if (iob == null) "IOB --" else "IOB ${u(iob)}U"
 
 fun isStale(glucose: Glucose, nowMs: Long): Boolean =
     nowMs - glucose.timeMs > STALE_GLUCOSE_MINUTES * 60_000
