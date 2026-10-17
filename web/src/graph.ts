@@ -29,6 +29,9 @@ const GAP_MS = 15 * 60_000;
 /** How close (in chart px) a tap must be to a lane marker. */
 const HIT_PX = 14;
 
+/** Document-level listeners per chart host, so re-renders don't pile them up. */
+const listeners = new WeakMap<HTMLElement, AbortController>();
+
 type Marker =
   | { lane: 'bolus'; cx: number; ms: number; bolus: Bolus }
   | { lane: 'tandem'; cx: number; ms: number; upload: PumpUpload }
@@ -171,7 +174,13 @@ export function renderGraph(
     }
   };
 
-  const show = (clientX: number, clientY: number) => {
+  // Key of the target currently shown, and of a target just dismissed (so the
+  // pointer jitter that follows a dismissing tap doesn't re-show it).
+  let shownKey: string | null = null;
+  let dismissedKey: string | null = null;
+
+  /** Shows details for the target under the pointer; `toggle` (a tap/click) hides them if already shown. */
+  const show = (clientX: number, clientY: number, toggle: boolean) => {
     const box = svg.getBoundingClientRect();
     const px = ((clientX - box.left) / box.width) * width;
     const py = ((clientY - box.top) / box.height) * HEIGHT;
@@ -188,6 +197,16 @@ export function renderGraph(
     const nearest = marker ? null : visible.reduce<Reading | null>(
       (best, r) => (!best || Math.abs(r.timeMs - ms) < Math.abs(best.timeMs - ms) ? r : best), null);
     if (!marker && !nearest) return hide();
+
+    const key = marker ? `${marker.lane}:${marker.ms}` : `glucose:${nearest!.timeMs}`;
+    if (toggle && !tooltip.hidden && key === shownKey) {
+      hide();
+      dismissedKey = key;
+      return;
+    }
+    if (!toggle && key === dismissedKey) return;
+    dismissedKey = null;
+    shownKey = key;
 
     const atMs = marker ? marker.ms : nearest!.timeMs;
     crosshair.setAttribute('x1', String(x(Math.min(atMs, nowMs))));
@@ -225,10 +244,28 @@ export function renderGraph(
     crosshair.setAttribute('visibility', 'hidden');
     dot.setAttribute('visibility', 'hidden');
     tooltip.hidden = true;
+    shownKey = null;
   };
-  hit.addEventListener('pointermove', (e) => show(e.clientX, e.clientY));
-  hit.addEventListener('pointerdown', (e) => show(e.clientX, e.clientY));
+
+  // Listeners outside the chart are replaced on every render.
+  listeners.get(host)?.abort();
+  const controller = new AbortController();
+  listeners.set(host, controller);
+  const { signal } = controller;
+
+  hit.addEventListener('pointermove', (e) => show(e.clientX, e.clientY, false), { signal });
+  hit.addEventListener('pointerdown', (e) => show(e.clientX, e.clientY, true), { signal });
   hit.addEventListener('pointerleave', (e) => {
-    if (e.pointerType === 'mouse') hide();
-  });
+    if (e.pointerType === 'mouse') {
+      hide();
+      dismissedKey = null;
+    }
+  }, { signal });
+  // A tap anywhere outside the chart, or Escape, dismisses the details.
+  document.addEventListener('pointerdown', (e) => {
+    if (!svg.contains(e.target as Node)) hide();
+  }, { signal });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hide();
+  }, { signal });
 }
