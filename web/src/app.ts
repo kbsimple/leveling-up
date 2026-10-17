@@ -275,7 +275,7 @@ export class App {
           this.renderMain();
         })),
       boluses.length
-        ? h('p', { class: 'muted small' },
+        ? h('p', { class: 'summary' },
           `${boluses.length} entries · ${insulin.toFixed(1)}U delivered · ${carbs}g carbs`)
         : null,
       boluses.length ? this.bolusList(boluses) : h('p', { class: 'muted' }, `None in the last ${this.listHours}h.`));
@@ -289,7 +289,7 @@ export class App {
       const profile = state.profileRate !== null && Math.abs(state.profileRate - state.basal.rate) >= 0.001
         ? ` · profile ${parseFloat(state.profileRate.toFixed(3))}`
         : '';
-      rows.push(['Basal', [h('strong', {}, formatRate(state.basal.rate)), `${profile} · as of ${formatClock(state.basal.startMs)}`]]);
+      rows.push(['Basal', [`${formatRate(state.basal.rate)}${profile} · as of ${formatClock(state.basal.startMs)}`]]);
     } else {
       rows.push(['Basal', ['No data']]);
     }
