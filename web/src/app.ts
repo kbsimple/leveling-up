@@ -2,7 +2,7 @@
 // textContent.
 
 import {
-  ago, arrow, formatAge, formatBolus, formatBolusDetail, formatClock, formatDelta, formatDuration,
+  arrow, formatAge, formatBolus, formatBolusDetail, formatClock, formatDelta, formatDuration,
   formatIob, formatRate, formatSyncStatus, isStale,
 } from './format';
 import { renderGraph, TARGET_HIGH, TARGET_LOW } from './graph';
@@ -283,42 +283,41 @@ export class App {
 
   private pumpSection(data: Data): HTMLElement {
     const state = pumpStateIn(data, 24);
-    const now = data.fetchedMs;
-    const rows: Children = [];
+    const rows: [string, Children][] = [];
+
     if (state.basal) {
-      const vs = state.profileRate !== null && Math.abs(state.profileRate - state.basal.rate) >= 0.001
-        ? ` (profile ${formatRate(state.profileRate)})`
-        : state.profileRate !== null ? ' (profile rate)' : '';
-      rows.push(h('p', {}, h('strong', {}, formatRate(state.basal.rate)), vs),
-        h('p', { class: 'muted small' }, `As of ${formatClock(state.basal.startMs)}, ${ago(state.basal.startMs, now)}`));
+      const profile = state.profileRate !== null && Math.abs(state.profileRate - state.basal.rate) >= 0.001
+        ? ` · profile ${parseFloat(state.profileRate.toFixed(3))}`
+        : '';
+      rows.push(['Basal', [h('strong', {}, formatRate(state.basal.rate)), `${profile} · as of ${formatClock(state.basal.startMs)}`]]);
     } else {
-      rows.push(h('p', { class: 'muted' }, 'No basal data.'));
+      rows.push(['Basal', ['No data']]);
     }
-    if (state.mode) {
-      const m = state.mode;
-      rows.push(h('p', {}, `Control-IQ: ${m.kind} since ${formatClock(m.startMs)}`,
-        m.open ? ' (still on at last upload)' : ` until ${formatClock(m.endMs)}`));
-    } else {
-      rows.push(h('p', {}, 'Control-IQ: normal'));
-    }
-    if (state.suspensions.length) {
-      rows.push(h('h3', {}, 'Suspensions (24h)'), h('ul', { class: 'plain' },
-        ...state.suspensions.map((s) => h('li', {},
-          `${formatClock(s.startMs)} · ${s.reason || 'suspended'}`,
-          s.resumedMs ? ` · resumed after ${formatDuration((s.resumedMs - s.startMs) / 60_000)}` : ' · not resumed yet'))));
-    }
-    if (data.sync) {
-      const s = data.sync;
-      rows.push(h('h3', {}, 'Data freshness'), h('ul', { class: 'plain' },
-        h('li', {}, 'Pump → Tandem cloud: ',
-          s.pumpUploadedMs ? `${formatClock(s.pumpUploadedMs)} (${ago(s.pumpUploadedMs, now)})` : 'unknown',
-          s.uploadClient ? ` via ${s.uploadClient}` : ''),
-        h('li', {}, 'Newest pump event: ',
-          s.newestEventMs ? formatClock(s.newestEventMs) : 'unknown'),
-        h('li', {}, 'Tandem → Nightscout: ',
-          s.syncedMs ? `${formatClock(s.syncedMs)} (${ago(s.syncedMs, now)})` : 'never',
-          s.error ? ` · last attempt failed: ${s.error}` : '')));
-    }
-    return h('section', { class: 'card' }, h('h2', {}, 'Basal & Control-IQ'), ...rows);
+
+    const m = state.mode;
+    rows.push(['Control-IQ', [m
+      ? (m.open ? `${m.kind} since ${formatClock(m.startMs)}` : `${m.kind} ${formatClock(m.startMs)}–${formatClock(m.endMs)}`)
+      : 'Normal']]);
+
+    state.suspensions.forEach((s, i) => {
+      const length = s.resumedMs ? `for ${formatDuration((s.resumedMs - s.startMs) / 60_000)}` : 'not resumed';
+      rows.push([i === 0 ? 'Suspended' : '', [`${dayPrefix(s.startMs, data.fetchedMs)}${formatClock(s.startMs)} ${length}${suspensionReason(s.reason)}`]]);
+    });
+
+    return h('section', { class: 'card' }, h('h2', {}, 'Basal & Control-IQ'),
+      h('dl', { class: 'facts' }, ...rows.flatMap(([label, value]) => [h('dt', {}, label), h('dd', {}, ...value)])));
   }
+}
+
+/** " · alarm" for pump reason codes we can name; empty otherwise. */
+function suspensionReason(reason: string): string {
+  const known: Record<string, string> = { TerminatedByAlarm: 'alarm', UserSuspended: 'by user' };
+  const text = known[reason] ?? reason;
+  return text ? ` · ${text}` : '';
+}
+
+/** "Yesterday " for times on the previous local day; empty for today. */
+function dayPrefix(timeMs: number, nowMs: number): string {
+  const day = (ms: number) => new Date(ms).toDateString();
+  return day(timeMs) === day(nowMs) ? '' : 'Yesterday ';
 }

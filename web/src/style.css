@@ -169,7 +169,9 @@ input {
 }
 .segmented button + button { border-left: 1px solid var(--border); }
 .segmented button.on { background: var(--accent); color: #fff; }
-ul.plain { padding-left: 18px; margin: 4px 0; font-size: 0.9rem; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 0.95rem; }
+.facts dt { color: var(--text-secondary); }
+.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 /* Graph */
 .graph-host { position: relative; touch-action: pan-y; }
