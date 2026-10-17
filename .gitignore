@@ -24,3 +24,4 @@ build/
 .DS_Store
 !.env.example
 *.egg-info/
+logs/
