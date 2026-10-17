@@ -53,19 +53,37 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
 - Pump CGM data could backfill glucose gaps, but not needed initially.
 - Both sources are unofficial APIs and can break; keep each behind an adapter.
 
+## Decisions (2026-10-17)
+
+- **Audience:** a small group sharing one set of credentials. No per-user accounts.
+- **Dosing source:** Tandem cloud (Tandem Source). The pump uploads roughly every
+  60 min; several requests close together appear to prompt an upload (to verify).
+- **Widget contents:** at-a-glance recent state: current glucose + trend + delta
+  + age, insulin on board, and boluses/carbs from the last 120 minutes.
+  No graph.
+- **Display only:** no alarms, never sends anything to the pump. Official apps
+  remain the alarm system.
+- **History:** hours only (ephemeral).
+- **Storage:** the user's existing cloud Nightscout instance, if used, serves as
+  ephemeral storage.
+- **Hosting:** the sync service must be portable: runnable on-prem (the local
+  host that runs openclaw) or in the cloud (Vultr account available).
+  Containerize it.
+- **Units/timezone:** mg/dL; America/Los_Angeles (pump clock may change when traveling).
+- **Stack:** Python backend using pydexcom and tconnectsync (newer than system 3.9).
+- **Later platforms (not immediate):** Wear OS, Chrome extension.
+
 ## Open questions
 
-- **Storage:** Is Nightscout the system of record, or a write-through cache
-  (load from sources, write opportunistically)? Or a lighter own store?
-- **Sync service:** Where does the poller run (home server, cloud function,
-  Android foreground service)? Dexcom Share and t:connect both need credentials
-  and have rate/latency limits.
-- **Widget delivery:** Native Android app widget, or reuse an existing
-  Nightscout-compatible widget (e.g. xDrip+/Juggluco-style clients) pointed at
-  our combined API?
-- **Data model:** Unified timeline of glucose readings, boluses, basal, carbs.
-- **Security/privacy:** Health data and credentials; keep the repo private and
-  secrets out of git.
+- **Widget app:** reuse an existing Nightscout client (leading candidate:
+  GlucoDataHandler; alternative xDrip+) vs. a custom widget. User is gathering
+  recommendations. Verify which fields (IOB, recent boluses) each can display.
+- **Nightscout vs. own API:** write synced data into the existing Nightscout,
+  or serve a small Nightscout-compatible API ourselves?
+- **Upload nudging:** confirm whether repeated Tandem requests trigger a pump
+  upload, and at what request rate it is safe and useful.
+- **IOB:** use the pump's reported IOB (stale between uploads) or compute a
+  decayed estimate from recent boluses?
 
 ## Next steps
 
