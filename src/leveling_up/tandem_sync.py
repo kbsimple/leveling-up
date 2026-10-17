@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 import arrow
 
+from leveling_up import bolus_details
 from leveling_up.config import Config
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,7 @@ class TandemSync:
             NightscoutEntry.tandemsource_profile_store = staticmethod(with_dia_override(
                 NightscoutEntry.tandemsource_profile_store, config.insulin_duration_hours))
             NightscoutEntry._leveling_up_dia = True
+        bolus_details.install()
 
         self._secret = secret
         self._process_cls = ProcessTimeRange

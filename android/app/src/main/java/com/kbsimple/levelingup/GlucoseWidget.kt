@@ -71,7 +71,7 @@ class RefreshAction : ActionCallback {
     }
 }
 
-private const val MAX_BOLUS_ROWS = 5
+private const val MAX_BOLUS_ROWS = 4
 
 @Composable
 private fun WidgetContent(snapshot: Snapshot?, nowMs: Long) {
@@ -129,8 +129,13 @@ private fun WidgetContent(snapshot: Snapshot?, nowMs: Long) {
 
 @Composable
 private fun BolusRow(bolus: Bolus, color: ColorProvider, small: TextStyle) {
-    Row {
-        Text(formatClock(bolus.timeMs), style = small, modifier = GlanceModifier.width(44.dp))
-        Text(formatBolus(bolus), style = TextStyle(fontSize = 15.sp, color = color))
+    Column {
+        Row {
+            Text(formatClock(bolus.timeMs), style = small, modifier = GlanceModifier.width(44.dp))
+            Text(formatBolus(bolus), style = TextStyle(fontSize = 15.sp, color = color))
+        }
+        formatBolusDetail(bolus)?.let { detail ->
+            Text(detail, style = small, maxLines = 1, modifier = GlanceModifier.padding(start = 44.dp))
+        }
     }
 }

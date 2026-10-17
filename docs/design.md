@@ -112,6 +112,14 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
 - **DIA:** Control-IQ always uses 5 hours, but the pump profile says 3, so the
   service overrides DIA (`INSULIN_DURATION_HOURS`) when converting pump
   profiles, which keeps tconnectsync's profile comparison stable.
+- **Bolus details:** tconnectsync uploads only delivered insulin, carbs and BG.
+  `bolus_details.py` adds the pump calculator's carb/correction split, the
+  suggested vs. requested amount, the extended portion, automatic vs. manual,
+  declined correction and early-stop reason to each bolus treatment (see the
+  module docstring for field names). Existing boluses from the last 3 days were
+  re-uploaded with these fields. Observed: automatic boluses are always pure
+  correction; extended boluses deliver the correction plus part of the carb
+  portion now.
 - Old Nightscout profiles were deleted (`cleanup-profiles`); only `frog` remains.
 - **Deployment:** one Docker Compose setup for both the on-prem Ubuntu server
   and Vultr; see the `deploy-sync` skill. Only one instance may run at a time.

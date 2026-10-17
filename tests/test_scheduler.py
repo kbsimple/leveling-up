@@ -1,5 +1,8 @@
 """Tests for the scheduler and boost mode."""
 
+import threading
+import time
+
 import pytest
 
 from leveling_up.scheduler import Boost, Job, Scheduler
@@ -100,6 +103,20 @@ def test_failing_job_records_error_and_reschedules(clock):
     assert status["last_error"] == "RuntimeError: nope"
     assert status["last_result"] is None
     assert scheduler.seconds_until_next() == 300
+
+
+def test_run_forever_stops_promptly_when_woken():
+    scheduler = Scheduler([Job("x", lambda: "ok", lambda: 3600)])
+    stop = threading.Event()
+    thread = threading.Thread(target=scheduler.run_forever, args=(stop,))
+    thread.start()
+    time.sleep(0.1)  # let it run once and start waiting
+    started = time.monotonic()
+    stop.set()
+    scheduler.wake()
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert time.monotonic() - started < 1
 
 
 def test_boosted_tandem_job_switches_back_after_boost(clock):

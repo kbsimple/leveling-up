@@ -105,9 +105,15 @@ class Scheduler:
             soonest = min(job.next_run for job in self._jobs.values())
         return max(0.0, soonest - self._clock())
 
+    def wake(self) -> None:
+        """Interrupts the wait between runs (e.g. so `run_forever` sees a stop)."""
+        self._wake.set()
+
     def run_forever(self, stop: threading.Event) -> None:
         while not stop.is_set():
             self.run_due()
+            if stop.is_set():
+                break
             self._wake.wait(timeout=min(self.seconds_until_next(), 60.0))
             self._wake.clear()
 

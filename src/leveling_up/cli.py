@@ -64,8 +64,13 @@ def _run(config: Config) -> int:
     server.start()
 
     stop = threading.Event()
+
+    def on_signal(*_) -> None:
+        stop.set()
+        scheduler.wake()
+
     for sig in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig, lambda *_: stop.set())
+        signal.signal(sig, on_signal)
     logger.info("service started: dexcom every %g min, tandem every %g min (boost %g min for %g min)",
                 config.dexcom_interval_minutes, config.tandem_interval_minutes,
                 config.boost_interval_minutes, config.boost_duration_minutes)

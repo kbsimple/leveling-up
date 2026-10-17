@@ -20,7 +20,27 @@ data class Glucose(
     val iob: Double?,
 )
 
-data class Bolus(val timeMs: Long, val insulin: Double, val carbs: Int)
+/**
+ * One bolus as the widget shows it.
+ *
+ * Calculator fields come from leveling-up's sync (see bolus_details.py) and are
+ * null for older treatments. [insulin] is the requested total (now + extended);
+ * [delivered] is what has been delivered so far.
+ */
+data class Bolus(
+    val timeMs: Long,
+    val insulin: Double,
+    val carbs: Int,
+    val automatic: Boolean = false,
+    val delivered: Double = insulin,
+    val food: Double? = null,
+    val correction: Double? = null,
+    val suggested: Double? = null,
+    val extended: Double? = null,
+    val extendedMinutes: Int? = null,
+    val declinedCorrection: Boolean = false,
+    val completion: String? = null,
+)
 
 /** Everything the widget shows, as of [fetchedMs]. */
 data class Snapshot(
@@ -41,9 +61,7 @@ data class Snapshot(
             })
         }
         put("boluses", JSONArray().apply {
-            boluses.forEach {
-                put(JSONObject().put("timeMs", it.timeMs).put("insulin", it.insulin).put("carbs", it.carbs))
-            }
+            boluses.forEach { put(it.toJson()) }
         })
         pumpDataMs?.let { put("pumpDataMs", it) }
         put("fetchedMs", fetchedMs)
@@ -65,10 +83,7 @@ data class Snapshot(
                         iob = if (it.has("iob")) it.getDouble("iob") else null,
                     )
                 },
-                boluses = (0 until b.length()).map {
-                    val x = b.getJSONObject(it)
-                    Bolus(x.getLong("timeMs"), x.getDouble("insulin"), x.getInt("carbs"))
-                },
+                boluses = (0 until b.length()).map { bolusFromJson(b.getJSONObject(it)) },
                 pumpDataMs = if (o.has("pumpDataMs")) o.getLong("pumpDataMs") else null,
                 fetchedMs = o.getLong("fetchedMs"),
                 error = if (o.has("error")) o.getString("error") else null,
@@ -91,17 +106,78 @@ fun parsePebble(json: String): Glucose? {
     )
 }
 
-/** Returns boluses and carb entries from a treatments array newer than the window, newest first. */
+private fun Bolus.toJson(): JSONObject = JSONObject().apply {
+    put("timeMs", timeMs)
+    put("insulin", insulin)
+    put("carbs", carbs)
+    put("automatic", automatic)
+    put("delivered", delivered)
+    food?.let { put("food", it) }
+    correction?.let { put("correction", it) }
+    suggested?.let { put("suggested", it) }
+    extended?.let { put("extended", it) }
+    extendedMinutes?.let { put("extendedMinutes", it) }
+    put("declinedCorrection", declinedCorrection)
+    completion?.let { put("completion", it) }
+}
+
+private fun bolusFromJson(x: JSONObject) = Bolus(
+    timeMs = x.getLong("timeMs"),
+    insulin = x.getDouble("insulin"),
+    carbs = x.getInt("carbs"),
+    automatic = x.optBoolean("automatic", false),
+    delivered = x.optDouble("delivered", x.getDouble("insulin")),
+    food = x.optNumber("food"),
+    correction = x.optNumber("correction"),
+    suggested = x.optNumber("suggested"),
+    extended = x.optNumber("extended"),
+    extendedMinutes = if (x.has("extendedMinutes")) x.getInt("extendedMinutes") else null,
+    declinedCorrection = x.optBoolean("declinedCorrection", false),
+    completion = if (x.has("completion")) x.getString("completion") else null,
+)
+
+/** The value as a Double, or null when absent, JSON null or not a number. */
+private fun JSONObject.optNumber(key: String): Double? =
+    if (isNull(key)) null else optDouble(key).takeIf { !it.isNaN() }
+
+/**
+ * Returns boluses and carb entries newer than the window, newest first.
+ *
+ * Extended-portion treatments (delivered later under the same `bolusId`) are
+ * folded into their parent bolus rather than listed separately.
+ */
 fun parseBoluses(json: String, nowMs: Long, windowMinutes: Long = BOLUS_WINDOW_MINUTES): List<Bolus> {
     val cutoff = nowMs - windowMinutes * 60_000
     val arr = JSONArray(json)
-    return (0 until arr.length())
-        .map { arr.getJSONObject(it) }
+    val treatments = (0 until arr.length()).map { arr.getJSONObject(it) }
+    val extendedDelivered = treatments
+        .filter { it.optBoolean("extendedPortion", false) && it.has("bolusId") }
+        .groupBy { it.getLong("bolusId") }
+        .mapValues { (_, parts) -> parts.sumOf { it.optNumber("insulin") ?: 0.0 } }
+    return treatments
+        .filterNot { it.optBoolean("extendedPortion", false) }
         .mapNotNull { t ->
-            val insulin = t.optDouble("insulin", 0.0).takeIf { !it.isNaN() } ?: 0.0
-            val carbs = t.optDouble("carbs", 0.0).takeIf { !it.isNaN() }?.toInt() ?: 0
+            val deliveredNow = t.optNumber("insulin") ?: 0.0
+            val carbs = t.optNumber("carbs")?.toInt() ?: 0
             val time = treatmentTimeMs(t) ?: return@mapNotNull null
-            if ((insulin <= 0.0 && carbs <= 0) || time < cutoff) null else Bolus(time, insulin, carbs)
+            if ((deliveredNow <= 0.0 && carbs <= 0) || time < cutoff) return@mapNotNull null
+            val laterDelivered = if (t.has("bolusId")) extendedDelivered[t.getLong("bolusId")] ?: 0.0 else 0.0
+            val delivered = deliveredNow + laterDelivered
+            Bolus(
+                timeMs = time,
+                insulin = t.optNumber("requestedInsulin") ?: delivered,
+                carbs = carbs,
+                automatic = if (t.has("automatic")) t.getBoolean("automatic")
+                    else t.optString("notes").contains("Automatic"),
+                delivered = delivered,
+                food = t.optNumber("foodInsulin"),
+                correction = t.optNumber("correctionInsulin"),
+                suggested = t.optNumber("suggestedInsulin"),
+                extended = t.optNumber("extendedInsulin"),
+                extendedMinutes = if (t.has("extendedMinutes")) t.getInt("extendedMinutes") else null,
+                declinedCorrection = t.optBoolean("declinedCorrection", false),
+                completion = t.optString("completion").ifEmpty { null },
+            )
         }
         .sortedByDescending { it.timeMs }
 }
