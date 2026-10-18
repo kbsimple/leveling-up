@@ -121,6 +121,16 @@ insulin dosing (Tandem t:slim), without juggling multiple apps.
   correction; extended boluses deliver the correction plus part of the carb
   portion now.
 - Old Nightscout profiles were deleted (`cleanup-profiles`); only `frog` remains.
+- **Incremental Tandem reads (2026-10-18):** a full 24h pass downloaded
+  ~333 KB every 15 minutes (~31 MB/day), almost all of it unchanged history.
+  The pump-logs endpoint only takes whole local days (`startDate` 00:00 to
+  `endDate` 23:59:59), so narrowing the time range alone can't get below one
+  day. Each run now reads the pump record first and skips the history when
+  `maxDateOfEvents` hasn't moved (tconnectsync's own autoupdate uses the same
+  signal). With new data, it reads from the last processed event minus a 6h
+  overlap, which rebuilds extended boluses, mode stops and the straddling
+  basal record whole. A full lookback runs at startup and every 24h. Boost uses
+  the same logic. Expected: ~3 MB/day. State is in memory only.
 - **Deployment:** one Docker Compose setup for both the on-prem Ubuntu server
   and Vultr; see the `deploy-sync` skill. Only one instance may run at a time.
 

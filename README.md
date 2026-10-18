@@ -108,6 +108,12 @@ leveling-up run
 - Syncs Dexcom every `DEXCOM_INTERVAL_MINUTES` (default 5) and Tandem every
   `TANDEM_INTERVAL_MINUTES` (default 15). Both run once at startup.
 - A failed sync is logged, shown in `status`, and retried at the next interval.
+- Tandem reads are incremental, in normal and boost mode alike. Each sync first
+  checks the pump's newest uploaded event (an 8 KB request). If nothing new
+  arrived, it skips the history download (`status` shows "skipped: no new pump
+  data since …"). Otherwise it reads from the last processed event minus 6
+  hours. Tandem serves history in whole days, so that's usually just today. It
+  reads the full `TANDEM_LOOKBACK_HOURS` at startup and once a day.
 - The control API listens on `CONTROL_HOST:CONTROL_PORT` (default
   `127.0.0.1:8787`). The `boost` and `status` commands talk to it.
 
@@ -221,7 +227,7 @@ Set in `.env` (see [.env.example](.env.example)) or the environment.
 | `TANDEM_INTERVAL_MINUTES` | `15` | Tandem polling interval |
 | `BOOST_INTERVAL_MINUTES` | `5` | Tandem interval during a boost |
 | `BOOST_DURATION_MINUTES` | `30` | Default boost length |
-| `TANDEM_LOOKBACK_HOURS` | `24` | How far back each Tandem sync reads |
+| `TANDEM_LOOKBACK_HOURS` | `24` | How far back a full Tandem read goes (see below) |
 | `CONTROL_HOST` | `127.0.0.1` | Control API bind address |
 | `CONTROL_PORT` | `8787` | Control API port |
 | `CONTROL_TOKEN` | empty | Bearer token; required when `CONTROL_HOST` isn't loopback |
