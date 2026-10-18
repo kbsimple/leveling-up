@@ -4,7 +4,7 @@ import {
   formatAge, formatDelta, formatDuration, formatIob, formatRate, formatTempSetting, isStale, u,
 } from '../src/format';
 import {
-  latestTreatmentMs, parseBasalSpans, parseEntries, parsePebble, parsePumpState, parseUploadHistory,
+  latestTreatmentMs, modePeriods, parseBasalSpans, parseEntries, parsePebble, parsePumpState, parseUploadHistory,
   profileSpans, scheduledBasal, spanAt, tempPeriods,
   treatmentTimeMs,
   type ProfileDoc,
@@ -225,5 +225,35 @@ describe('temp rate periods', () => {
   it('formats the setting', () => {
     expect(formatTempSetting({ rate: 0.1, percent: 25 })).toBe('25% (0.1 U/hr)');
     expect(formatTempSetting({ rate: null, percent: null })).toBe('on');
+  });
+});
+
+describe('Control-IQ mode periods', () => {
+  const asOf = ms('2026-10-17T21:30:00Z');
+
+  it('parses ended and open periods with their details, oldest first', () => {
+    const periods = modePeriods([
+      { eventType: 'Exercise', created_at: '2026-10-17T20:08:00Z', duration: 60, reason: 'Exercise - Not Ended' },
+      { eventType: 'Sleep', created_at: '2026-10-17T07:32:17Z', duration: 359.25, reason: 'Sleep (Manual)' },
+      { eventType: 'Exercise', created_at: '2026-10-17T16:26:52Z', duration: 30,
+        reason: 'Exercise (Timed) (Stopped by timer)' },
+      { eventType: 'Temp Basal', created_at: '2026-10-17T16:00:00Z', duration: 5 },
+    ], asOf);
+    expect(periods).toEqual([
+      { kind: 'Sleep', startMs: ms('2026-10-17T07:32:17Z'), endMs: ms('2026-10-17T13:31:32Z'), open: false, detail: 'manual' },
+      { kind: 'Exercise', startMs: ms('2026-10-17T16:26:52Z'), endMs: ms('2026-10-17T16:56:52Z'), open: false,
+        detail: 'timed, stopped by timer' },
+      // Extended from its 60 recorded minutes to the newest pump data.
+      { kind: 'Exercise', startMs: ms('2026-10-17T20:08:00Z'), endMs: asOf, open: true, detail: '' },
+    ]);
+  });
+
+  it('prefers the ended record when an open one for the same start remains', () => {
+    const periods = modePeriods([
+      { eventType: 'Sleep', created_at: '2026-10-17T07:00:00Z', duration: 20, reason: 'Sleep (Scheduled) - Not Ended' },
+      { eventType: 'Sleep', created_at: '2026-10-17T07:00:00Z', duration: 400, reason: 'Sleep (Scheduled)' },
+    ], asOf);
+    expect(periods).toHaveLength(1);
+    expect(periods[0]).toMatchObject({ open: false, detail: 'scheduled', endMs: ms('2026-10-17T13:40:00Z') });
   });
 });

@@ -12,6 +12,8 @@
   --series-manual: #eb6834;
   --series-auto: #1baf7a;
   --series-basal: #eda100;
+  --series-sleep: #e87ba4;
+  --series-exercise: #008300;
   --band: rgba(42, 120, 214, 0.08);
   --grid: #e8e7e2;
   --danger: #c0362c;
@@ -46,6 +48,8 @@
     --series-manual: #d95926;
     --series-auto: #199e70;
     --series-basal: #c98500;
+    --series-sleep: #d55181;
+    --series-exercise: #008300;
     --band: rgba(57, 135, 229, 0.12);
     --grid: #2a2a28;
     --danger: #ef6b61;
@@ -66,6 +70,8 @@
   --series-manual: #d95926;
   --series-auto: #199e70;
   --series-basal: #c98500;
+  --series-sleep: #d55181;
+  --series-exercise: #008300;
   --band: rgba(57, 135, 229, 0.12);
   --grid: #2a2a28;
   --danger: #ef6b61;
@@ -229,6 +235,9 @@ input {
   stroke: var(--surface-1);
   stroke-width: 3px;
 }
+.mode-sleep { fill: var(--series-sleep); }
+.mode-exercise { fill: var(--series-exercise); }
+.mode-tint { opacity: 0.1; }
 .basal-profile { fill: none; stroke: var(--text-secondary); stroke-width: 1.5; stroke-dasharray: 4 3; }
 .tandem-upload { fill: var(--text-secondary); stroke: var(--surface-1); stroke-width: 2; }
 .ns-sync { fill: var(--surface-1); stroke: var(--text-secondary); stroke-width: 2; }
@@ -265,6 +274,8 @@ input {
   width: 14px; height: 10px; border-top: 3px solid var(--text-secondary);
   background: repeating-linear-gradient(-45deg, var(--series-basal) 0 1.5px, transparent 1.5px 4px);
 }
+.key-sleep::before { width: 14px; height: 4px; border-radius: 2px; background: var(--series-sleep); }
+.key-exercise::before { width: 14px; height: 4px; border-radius: 2px; background: var(--series-exercise); }
 .key-upload::before { width: 8px; height: 8px; background: var(--text-secondary); transform: rotate(45deg); margin-left: 1px; }
 .key-sync::before { width: 7px; height: 7px; border: 2px solid var(--text-secondary); border-radius: 50%; }
 .key-pending::before {
@@ -275,7 +286,7 @@ input {
 .key-band::before { width: 14px; height: 10px; background: var(--band); border: 1px solid var(--grid); }
 
 @media (forced-colors: active) {
-  .bolus-manual, .bolus-auto, .crosshair-dot, .glucose-last { forced-color-adjust: none; }
+  .bolus-manual, .bolus-auto, .crosshair-dot, .glucose-last, .mode-bar { forced-color-adjust: none; }
 }
 
 /* /statusz */

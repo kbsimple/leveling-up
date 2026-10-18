@@ -180,6 +180,18 @@ duration isn't recorded, so the actual span is shown) and draws a labeled bar
 above the basal panel plus a texture on those steps. The basal card lists
 temp rates from the last 24 hours.
 
+**Sleep and Exercise modes:** tconnectsync already uploads Control-IQ activity
+changes (`LidAaUserModeChange`, part of the PUMP_EVENTS feature) as `Sleep` /
+`Exercise` treatments with a duration and a reason such as "Sleep (Manual)" or
+"Exercise (Timed) (Stopped by timer)". A mode still on at sync time is uploaded
+with its length so far and "... - Not Ended"; tconnectsync replaces it once
+the stop event arrives. The web app extends such an open period to the newest
+pump data and, if both records for one start exist, keeps the ended one. Each
+mode gets a bar in its own row above the temp-rate row (sleep = palette slot 5,
+magenta; exercise = slot 6, green; validated with slots 1–4 in both themes)
+and a faint tint behind the basal panel. The basal card lists the current mode
+and earlier periods from the last 24 hours.
+
 ## Open questions
 
 - **Widget app:** reuse an existing Nightscout client (leading candidate:

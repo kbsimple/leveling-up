@@ -4,7 +4,7 @@
 // with textContent only.
 
 import { ago, formatBolus, formatBolusDetail, formatClock, formatDuration, formatRate, formatTempSetting } from './format';
-import { spanAt, type BasalSpan, type Bolus, type PumpUpload, type Reading, type TempPeriod } from './model';
+import { spanAt, type BasalSpan, type Bolus, type PumpMode, type PumpUpload, type Reading, type TempPeriod } from './model';
 
 export const TARGET_LOW = 70;
 export const TARGET_HIGH = 180;
@@ -23,13 +23,16 @@ export interface BasalTimeline {
   delivered: BasalSpan[];
   profile: BasalSpan[];
   temps: TempPeriod[];
+  /** Control-IQ Sleep/Exercise periods. */
+  modes: PumpMode[];
 }
 
 const SVG = 'http://www.w3.org/2000/svg';
 const PAD = { top: 12, right: 12, left: 34 };
 const PLOT_BOTTOM = 186; // glucose plot
 const BOLUS_Y = PLOT_BOTTOM + 16; // bolus marker lane
-const TEMP_BAR_Y = BOLUS_Y + 24; // temp rate bars, labeled above, clear of bolus markers
+const MODE_BAR_Y = BOLUS_Y + 24; // Sleep/Exercise bars, labeled above, clear of bolus markers
+const TEMP_BAR_Y = MODE_BAR_Y + 16; // temp rate bars, labeled above
 const BASAL_TOP = TEMP_BAR_Y + 8; // basal panel
 const BASAL_BOTTOM = BASAL_TOP + 44;
 const TANDEM_Y = BASAL_BOTTOM + 16; // pump upload / Nightscout sync lane
@@ -45,12 +48,13 @@ const HIT_PX = 14;
 /** Document-level listeners per chart host, so re-renders don't pile them up. */
 const listeners = new WeakMap<HTMLElement, AbortController>();
 
-type Lane = 'plot' | 'bolus' | 'basal' | 'tandem';
+type Lane = 'plot' | 'bolus' | 'mode' | 'basal' | 'tandem';
 
 /** Which horizontal band a chart y coordinate falls in. */
 function laneAt(py: number): Lane {
   if (py <= PLOT_BOTTOM + 4) return 'plot';
-  if (py < TEMP_BAR_Y - 4) return 'bolus';
+  if (py < MODE_BAR_Y - 8) return 'bolus';
+  if (py < TEMP_BAR_Y - 6) return 'mode';
   if (py <= BASAL_BOTTOM + 5) return 'basal';
   return 'tandem';
 }
@@ -61,9 +65,13 @@ type Marker =
   | { lane: 'tandem'; cx: number; ms: number; sync: true };
 
 /** "12:35–1:50 AM (1h 15m)" or "since 12:35 PM, on at last upload". */
-function tempSpanText(p: TempPeriod): string {
+function tempSpanText(p: TempPeriod | PumpMode): string {
   if (p.open) return `Since ${formatClock(p.startMs)}, on at last upload`;
   return `${formatClock(p.startMs)}–${formatClock(p.endMs)} (${formatDuration((p.endMs - p.startMs) / 60_000)})`;
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function el<K extends keyof SVGElementTagNameMap>(
@@ -220,6 +228,20 @@ export function renderGraph(
   }
   if (profileLine) el('path', { d: profileLine, class: 'basal-profile' }, svg);
 
+  // Sleep/Exercise: a labeled bar above the temp row and a faint tint behind the basal panel.
+  const modes = basal.modes.filter((p) => p.endMs > startMs && p.startMs < nowMs);
+  for (const p of modes) {
+    const x1 = clampX(p.startMs);
+    const w = Math.max(clampX(p.endMs) - x1, 3);
+    const kind = p.kind.toLowerCase();
+    const tint = el('rect', { x: x1, y: BASAL_TOP, width: w, height: BASAL_BOTTOM - BASAL_TOP, class: `mode-tint mode-${kind}` });
+    svg.insertBefore(tint, svg.querySelector('.basal-area'));
+    el('rect', { x: x1, y: MODE_BAR_Y - 2, width: w, height: 4, rx: 2, class: `mode-bar mode-${kind}` }, svg);
+    if (w >= p.kind.length * 5 + 4) {
+      el('text', { x: x1 + 1, y: MODE_BAR_Y - 5, class: 'temp-label' }, svg).textContent = p.kind;
+    }
+  }
+
   // Tandem lane: pump -> Tandem uploads (diamonds) and the last Nightscout sync (ring).
   for (const u of tandem?.uploads ?? []) {
     if (u.uploadedMs < startMs || u.uploadedMs > nowMs) continue;
@@ -289,15 +311,19 @@ export function renderGraph(
         .sort((a, b) => Math.abs(a.cx - px) - Math.abs(b.cx - px))[0] ?? null;
     }
     // The temp bar row sits at the top of the basal band.
+    const mode = lane === 'mode'
+      ? modes.find((p) => px >= clampX(p.startMs) - 6 && px <= clampX(p.endMs) + 6) ?? null
+      : null;
     const temp = lane === 'basal' && py < BASAL_TOP + 2
       ? temps.find((p) => px >= clampX(p.startMs) - 6 && px <= clampX(p.endMs) + 6) ?? null
       : null;
     const basalSpan = lane === 'basal' && !temp ? spanAt(delivered, Math.min(ms, nowMs - 1)) : null;
-    const nearest = marker || basalSpan || temp ? null : visible.reduce<Reading | null>(
+    const nearest = marker || basalSpan || temp || mode ? null : visible.reduce<Reading | null>(
       (best, r) => (!best || Math.abs(r.timeMs - ms) < Math.abs(best.timeMs - ms) ? r : best), null);
-    if (!marker && !basalSpan && !temp && !nearest) return hide();
+    if (!marker && !basalSpan && !temp && !mode && !nearest) return hide();
 
     const key = marker ? `${marker.lane}:${marker.ms}`
+      : mode ? `mode:${mode.startMs}`
       : temp ? `temp:${temp.startMs}`
         : basalSpan ? `basal:${basalSpan.startMs}` : `glucose:${nearest!.timeMs}`;
     if (toggle && !tooltip.hidden && key === shownKey) {
@@ -309,7 +335,8 @@ export function renderGraph(
     dismissedKey = null;
     shownKey = key;
 
-    const atMs = marker ? marker.ms : temp ? Math.max(temp.startMs, startMs)
+    const period = mode ?? temp;
+    const atMs = marker ? marker.ms : period ? Math.max(period.startMs, startMs)
       : basalSpan ? Math.min(Math.max(ms, startMs), nowMs) : nearest!.timeMs;
     crosshair.setAttribute('x1', String(x(Math.min(atMs, nowMs))));
     crosshair.setAttribute('x2', String(x(Math.min(atMs, nowMs))));
@@ -332,6 +359,8 @@ export function renderGraph(
         ...(u.newestEventMs !== null ? [`Pump data through ${formatClock(u.newestEventMs)}`] : []));
     } else if (marker) {
       lines('Synced to Nightscout', `${formatClock(marker.ms)} (${ago(marker.ms, nowMs)})`);
+    } else if (mode) {
+      lines(`${mode.kind} mode`, tempSpanText(mode), ...(mode.detail ? [capitalize(mode.detail)] : []));
     } else if (temp) {
       lines(`Temp rate ${formatTempSetting(temp)}`, tempSpanText(temp));
     } else if (basalSpan) {
@@ -345,8 +374,10 @@ export function renderGraph(
       const pending = pendingFromMs !== null && nearest!.timeMs > pendingFromMs;
       const at = spanAt(delivered, nearest!.timeMs);
       const atTemp = at?.temp ? ` · temp ${tempPercent(at) !== null ? `${tempPercent(at)}%` : 'on'}` : '';
+      const inMode = modes.find((p) => p.startMs <= nearest!.timeMs && nearest!.timeMs < p.endMs);
       lines(`${nearest!.mgdl} mg/dL`, formatClock(nearest!.timeMs),
         ...(at ? [`Basal ${formatRate(at.rate)}${atTemp}`] : []),
+        ...(inMode ? [`${inMode.kind} mode`] : []),
         ...(pending ? ['Pump data not uploaded yet'] : []));
     }
     tooltip.hidden = false;

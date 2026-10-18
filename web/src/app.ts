@@ -6,7 +6,7 @@ import {
   formatIob, formatRate, formatSyncStatus, formatTempSetting, isStale,
 } from './format';
 import { renderGraph, TARGET_HIGH, TARGET_LOW } from './graph';
-import { BOLUS_WINDOW_MINUTES, parseBasalSpans, profileSpans, tempPeriods, type Bolus } from './model';
+import { BOLUS_WINDOW_MINUTES, modePeriods, parseBasalSpans, profileSpans, tempPeriods, type Bolus } from './model';
 import { bolusesIn, fetchData, NightscoutError, pumpStateIn, type Data } from './nightscout';
 import {
   forgetSettings, loadPref, loadSettings, normalizeUrl, savePref, saveSettings, type Settings,
@@ -250,6 +250,8 @@ export class App {
         h('span', { class: 'key key-basal' }, 'Basal (U/hr)'),
         h('span', { class: 'key key-profile' }, 'Profile basal'),
         h('span', { class: 'key key-temp' }, 'Temp rate'),
+        h('span', { class: 'key key-sleep' }, 'Sleep mode'),
+        h('span', { class: 'key key-exercise' }, 'Exercise mode'),
         h('span', { class: 'key key-upload' }, 'Pump → Tandem upload'),
         h('span', { class: 'key key-sync' }, 'Nightscout sync'),
         h('span', { class: 'key key-pending' }, 'Not uploaded yet')));
@@ -270,6 +272,7 @@ export class App {
           delivered,
           profile: profileSpans(this.data.profile, fetchedMs - this.graphHours * 3_600_000, fetchedMs),
           temps: tempPeriods(delivered),
+          modes: modePeriods(this.data.treatments, delivered.at(-1)?.endMs ?? fetchedMs),
         };
       })());
   }
@@ -306,10 +309,19 @@ export class App {
       rows.push(['Basal', ['No data']]);
     }
 
+    // The current mode, then earlier Sleep/Exercise periods in the last 24h, newest first.
     const m = state.mode;
     rows.push(['Control-IQ', [m
       ? (m.open ? `${m.kind} since ${formatClock(m.startMs)}` : `${m.kind} ${formatClock(m.startMs)}–${formatClock(m.endMs)}`)
       : 'Normal']]);
+    const cutoff = data.fetchedMs - 24 * 3_600_000;
+    modePeriods(data.treatments, data.fetchedMs)
+      .filter((p) => p.endMs > cutoff && !(m && p.startMs === m.startMs && p.kind === m.kind))
+      .reverse()
+      .forEach((p) => {
+        const span = `${dayPrefix(p.startMs, data.fetchedMs)}${formatClock(p.startMs)}–${formatClock(p.endMs)}`;
+        rows.push(['', [`${p.kind} · ${span} (${formatDuration((p.endMs - p.startMs) / 60_000)})`]]);
+      });
 
     tempPeriods(parseBasalSpans(data.treatments)).reverse().forEach((p, i) => {
       const when = p.open

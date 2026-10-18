@@ -158,6 +158,8 @@ export interface PumpMode {
   endMs: number;
   /** True when the pump hadn't ended the mode as of its last upload. */
   open: boolean;
+  /** How it started or stopped, e.g. "manual", "timed, stopped by timer"; may be empty. */
+  detail: string;
 }
 
 export interface Suspension {
@@ -237,16 +239,8 @@ export function parsePumpState(
     : null;
   const pumpAsOf = basal ? basal.startMs + basal.durationMinutes * 60_000 : nowMs;
 
-  let mode: PumpMode | null = null;
-  for (const { t, ms } of byTime) {
-    if (t.eventType !== 'Sleep' && t.eventType !== 'Exercise') continue;
-    const endMs = ms + (num(t.duration) ?? 0) * 60_000;
-    const open = typeof t.reason === 'string' && t.reason.includes('Not Ended');
-    if (open || endMs >= pumpAsOf - 60_000) {
-      mode = { kind: t.eventType, startMs: ms, endMs, open };
-    }
-    break;
-  }
+  const last = modePeriods(treatments, pumpAsOf).at(-1);
+  const mode = last && (last.open || last.endMs >= pumpAsOf - 60_000) ? last : null;
 
   const resumes = byTime.filter((x) => x.t.eventType === 'Basal Resume').map((x) => x.ms);
   const suspensions = byTime
@@ -433,4 +427,41 @@ export function tempPeriods(spans: BasalSpan[]): TempPeriod[] {
   const final = periods[periods.length - 1];
   if (final && last && final.endMs === last.endMs) final.open = true;
   return periods;
+}
+
+const NOT_ENDED = 'Not Ended';
+
+/** "manual" from "Sleep (Manual)"; "timed, stopped by timer" from "Exercise (Timed) (Stopped by timer)". */
+function modeDetail(reason: string): string {
+  return [...reason.matchAll(/\(([^)]+)\)/g)].map((m) => m[1].toLowerCase()).join(', ');
+}
+
+/**
+ * Control-IQ Sleep and Exercise periods, oldest first. tconnectsync uploads a
+ * mode that hasn't ended with its length as of that sync and reason
+ * "... - Not Ended"; such a period is extended to `pumpAsOfMs`, the end of the
+ * newest pump data. Should both an open and an ended record exist for one
+ * start, the ended one wins.
+ */
+export function modePeriods(treatments: Treatment[], pumpAsOfMs: number): PumpMode[] {
+  const byStart = new Map<string, PumpMode>();
+  for (const t of treatments) {
+    if (t.eventType !== 'Sleep' && t.eventType !== 'Exercise') continue;
+    const startMs = treatmentTimeMs(t);
+    if (startMs === null) continue;
+    const reason = typeof t.reason === 'string' ? t.reason : '';
+    const open = reason.includes(NOT_ENDED);
+    const recordedEnd = startMs + Math.max(num(t.duration) ?? 0, 0) * 60_000;
+    const period: PumpMode = {
+      kind: t.eventType,
+      startMs,
+      endMs: open ? Math.max(recordedEnd, pumpAsOfMs) : recordedEnd,
+      open,
+      detail: modeDetail(reason),
+    };
+    const key = `${period.kind}:${startMs}`;
+    const seen = byStart.get(key);
+    if (!seen || (seen.open && !open)) byStart.set(key, period);
+  }
+  return [...byStart.values()].sort((a, b) => a.startMs - b.startMs);
 }
