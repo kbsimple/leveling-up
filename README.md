@@ -65,6 +65,12 @@ publishes these as a Nightscout devicestatus record (`device: leveling-up`).
 hold sample data and the exact text expected. Both the widget's Kotlin tests and the web tests run
 them, so the two can't drift apart.
 
+**Real-data snapshot:** `fixtures/snapshot/` is a 24-hour download of real
+Nightscout data, lightly obfuscated (see `snapshot-fixture` below), with
+`expected.json` holding what the widget shows for it. The web tests replay it
+through the site's fetch and parsing code; the widget's Kotlin tests check the
+same expected text.
+
 ## Setup
 
 Requires Python 3.12+.
@@ -162,6 +168,25 @@ leveling-up cleanup-profiles         # dry run: show what would change
 leveling-up cleanup-profiles --yes   # apply
 ```
 
+### `snapshot-fixture`
+
+Downloads the web app's 24-hour window from Nightscout and writes an
+obfuscated copy to `fixtures/snapshot/` (or `--out DIR`) for tests:
+
+- Timestamps move back by whole days to July 1 (January 15 in standard time),
+  keeping local time of day and the UTC offset.
+- Glucose values get a few mg/dL of seeded jitter.
+- Nightscout, pump event and bolus ids are renumbered, keeping links between
+  records.
+- The profile keeps only basal, timezone, DIA, units and targets.
+
+Insulin and carbs are unchanged. `expected.json` isn't regenerated; after a
+refresh, update it and the counts in `web/test/snapshot.test.ts` by hand.
+
+```
+leveling-up snapshot-fixture
+```
+
 ## Control API
 
 The `boost` and `status` commands are thin clients for this API. Anything that
@@ -220,5 +245,8 @@ instance at a time against a given Nightscout. The `deploy-sync` skill
 ## Tests
 
 ```
-.venv/bin/python -m pytest --tb=short -q
+.venv/bin/python -m pytest --tb=short -q             # service
+(cd web && npm run typecheck && npx vitest run)      # site, including the snapshot replay
 ```
+
+The widget's Kotlin tests run in GitHub Actions.

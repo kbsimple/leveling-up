@@ -22,6 +22,10 @@ class NightscoutClient:
         resp.raise_for_status()
         return resp.json() if resp.content else None
 
+    def get(self, path: str, params: Optional[dict] = None) -> Any:
+        """GETs `path` (relative to the site root) and returns the decoded JSON."""
+        return self._request("GET", path, params=params)
+
     def latest_sgv_ms(self, device: str) -> int:
         """Returns the epoch-ms date of the newest sgv entry from `device`, or 0."""
         entries = self._request(

@@ -7,12 +7,15 @@ Commands:
     boost --cancel      End a boost early.
     status              Show the running service's job state.
     cleanup-profiles    Keep only the default Nightscout profile, with DIA set.
+    snapshot-fixture    Save an obfuscated 24h Nightscout snapshot for tests.
 """
 
 import argparse
+import datetime
 import json
 import logging
 import os
+import pathlib
 import signal
 import sys
 import threading
@@ -115,6 +118,19 @@ def _cleanup_profiles(config: Config, yes: bool) -> int:
     return 0
 
 
+def _snapshot_fixture(config: Config, out_dir: pathlib.Path) -> int:
+    from leveling_up import fixture_snapshot  # pylint: disable=import-outside-toplevel
+
+    nightscout = NightscoutClient(config.ns_url, config.ns_secret)
+    raw = fixture_snapshot.download(nightscout, datetime.datetime.now(datetime.timezone.utc))
+    files = fixture_snapshot.obfuscate(raw, config.timezone_name)
+    fixture_snapshot.write(files, out_dir)
+    print(f"wrote {out_dir} (as of {files['snapshot']['fetchedAt']}): "
+          f"{len(files['entries'])} entries, {len(files['treatments'])} treatments, "
+          f"{len(files['devicestatus'])} devicestatus")
+    return 0
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(prog="leveling-up", description=__doc__.splitlines()[0])
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -128,6 +144,8 @@ def main(argv: Optional[list[str]] = None) -> None:
     sub.add_parser("status")
     cleanup = sub.add_parser("cleanup-profiles")
     cleanup.add_argument("--yes", action="store_true", help="apply changes (default: dry run)")
+    snapshot = sub.add_parser("snapshot-fixture")
+    snapshot.add_argument("--out", type=pathlib.Path, default=pathlib.Path("fixtures/snapshot"))
     args = parser.parse_args(argv)
 
     load_dotenv()
@@ -164,3 +182,5 @@ def main(argv: Optional[list[str]] = None) -> None:
         return
     if args.command == "cleanup-profiles":
         sys.exit(_cleanup_profiles(config, args.yes))
+    if args.command == "snapshot-fixture":
+        sys.exit(_snapshot_fixture(config, args.out))

@@ -1,0 +1,41 @@
+{
+ "description": "What the widget and site show for this snapshot. Checked by web/test/snapshot.test.ts and the Android SharedFixturesTest. Each view sees only treatments created at or before its `now`.",
+ "glucose": { "mgdl": 145, "direction": "Flat", "delta": -1, "iob": 0.42 },
+ "views": [
+  {
+   "name": "at snapshot time: no boluses in the widget's 2h window",
+   "now": "2026-07-02T01:28:04.339Z",
+   "windowMinutes": 120,
+   "boluses": [],
+   "sync": { "text": "Pump upload 14m ago · synced 11m ago", "stale": false }
+  },
+  {
+   "name": "2 PM local: combo meal bolus and an auto bolus",
+   "now": "2026-07-01T21:00:00Z",
+   "windowMinutes": 120,
+   "boluses": [
+    { "line1": "4.4U · 50g", "line2": "3.1 carb + 1.2 corr · 1.6U over 1h" },
+    { "line1": "1.0U · auto", "line2": null }
+   ]
+  },
+  {
+   "name": "site list: last 24h",
+   "now": "2026-07-02T01:28:04.339Z",
+   "windowMinutes": 1440,
+   "boluses": [
+    { "line1": "0.8U · auto", "line2": null },
+    { "line1": "4.4U · 50g", "line2": "3.1 carb + 1.2 corr · 1.6U over 1h" },
+    { "line1": "1.0U · auto", "line2": null },
+    { "line1": "0.4U · auto", "line2": null },
+    { "line1": "0.7U · auto", "line2": null },
+    { "line1": "4.8U · 65g", "line2": "4.3 carb + 0.5 corr · 2.2U over 45m" },
+    { "line1": "0.7U", "line2": "correction" },
+    { "line1": "0.7U · auto", "line2": null },
+    { "line1": "1.1U · 18g", "line2": "0.5U over 15m" },
+    { "line1": "0.7U", "line2": "correction" },
+    { "line1": "0.1U · auto", "line2": null },
+    { "line1": "2.4U · 40g", "line2": "1.2U over 1h" }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,5 @@
+{
+ "fetchedAt": "2026-07-02T01:28:04.339Z",
+ "timezone": "America/Los_Angeles",
+ "note": "Real Nightscout data, time-shifted, glucose-jittered and re-identified; regenerate with `leveling-up snapshot-fixture`."
+}

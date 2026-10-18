@@ -1,0 +1,21 @@
+{
+ "status": [
+  {
+   "now": 1782955684568
+  }
+ ],
+ "bgs": [
+  {
+   "sgv": "145",
+   "trend": 4,
+   "direction": "Flat",
+   "datetime": 1782955220499,
+   "bgdelta": -1,
+   "iob": "0.42",
+   "bwp": "0",
+   "bwpo": 123,
+   "cob": 0
+  }
+ ],
+ "cals": []
+}
